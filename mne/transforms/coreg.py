@@ -89,6 +89,113 @@ def fit_matched_pts(src_pts, tgt_pts, tol=None, params=False):
 
 
 
+def find_mri_paths(subject='fsaverage', subjects_dir=None):
+    """Find all files of an mri relevant for source transformation
+
+    Parameters
+    ----------
+    subject : str
+        Name of the mri subject.
+    subjects_dir : None | path
+        Override the SUBJECTS_DIR environment variable
+        (sys.environ['SUBJECTS_DIR'])
+
+    Returns
+    -------
+    paths | dict
+        Dictionary whose keys are relevant file type names (str), and whose
+        values are lists of paths.
+
+    """
+    subjects_dir = get_subjects_dir(subjects_dir, raise_error=True)
+
+    s_dir = os.path.join(subjects_dir, '{sub}')
+    paths = {'s_dir': s_dir}
+
+    # directories to create
+    bem_dir = os.path.join(s_dir, 'bem')
+    surf_dir = os.path.join(s_dir, 'surf')
+    lbl_dir = os.path.join(s_dir, 'label')
+
+    paths['dirs'] = [bem_dir, surf_dir]
+
+    bem_path = os.path.join(bem_dir, '{name}.{ext}')
+    surf_path = os.path.join(surf_dir, '{name}')
+
+    # surf/ files
+    paths['surf'] = surf = []
+    surf_names = ('orig', 'orig_avg',
+                  'inflated', 'inflated_avg', 'inflated_pre',
+                  'pial', 'pial_avg',
+                  'smoothwm',
+                  'white', 'white_avg',
+                  'sphere', 'sphere.reg', 'sphere.reg.avg')
+    for name in surf_names:
+        for hemi in ('lh.', 'rh.'):
+            fname = surf_path.format(sub='{sub}', name=hemi + name)
+            surf.append(fname)
+
+    # watershed files
+    for name in ['inner_skull', 'outer_skull', 'outer_skin']:
+        fname = bem_path.format(sub='{sub}', name=name, ext='surf')
+        surf.append(fname)
+
+    # bem files
+    paths['bem'] = bem = []
+    path = os.path.join(subjects_dir, '{sub}', 'bem', '{sub}-{name}.fif')
+    for name in ['head']:
+        fname = path.format(sub='{sub}', name=name)
+        bem.append(fname)
+
+    # fiducials
+    fname = path.format(sub='{sub}', name='fiducials')
+    paths['fid'] = [fname]
+
+    # check presence of required files
+    for ftype in ['surf', 'bem', 'fid']:
+        for fname in paths[ftype]:
+            src = fname.format(sub=subject)
+            if not os.path.exists(src):
+                raise IOError("Required file not found: %r" % src)
+
+    # src
+    paths['ico'] = icos = []
+    paths['src'] = src = []
+    basename = '{sub}-ico-{ico}-src.fif'
+    path = os.path.join(bem_dir, basename)
+    p = re.compile('\A' + basename.format(sub=subject, ico='(\d+)'))
+    for name in os.listdir(bem_dir.format(sub=subject)):
+        match = p.match(name)
+        if match:
+            ico = int(match.group(1))
+            icos.append(ico)
+            fname = path.format(sub='{sub}', ico=ico)
+            src.append(fname)
+    if len(src) == 0:
+        raise IOError("No source space found.")
+
+    # labels
+    paths['lbl'] = lbls = []
+    top = lbl_dir.format(sub=subject)
+    relpath_start = len(top) + 1
+    for dirp, _, files in os.walk(top):
+        files = fnmatch.filter(files, '*.label')
+        dirname = os.path.join(lbl_dir, dirp[relpath_start:])
+        for basename in files:
+            lbls.append(os.path.join(dirname, basename))
+        paths['dirs'].append(dirname)
+
+    # duplicate curvature files
+    paths['duplicate'] = dup = []
+    path = os.path.join(surf_dir, '{name}')
+    for name in ['lh.curv', 'rh.curv']:
+        fname = path.format(sub='{sub}', name=name)
+        dup.append(fname)
+
+    return paths
+
+
+
 class MriHeadFitter(object):
     """
     Fit an MRI to a head shape model.
@@ -171,7 +278,9 @@ class MriHeadFitter(object):
         self.subjects_dir = subjects_dir
         self.s_from = s_from
         self.s_to = s_to
-        self._paths = self._find_paths()
+        self._paths = find_mri_paths(s_from, subjects_dir)
+        raw_dir = os.path.dirname(self._raw_fname)
+        self._trans_fname = os.path.join(raw_dir, '{sub}-trans.fif')
 
         self._t_mri_origin_adjust = translation(0, 0, 0)
         self.set(0, 0, 0, 1, 1, 1)
@@ -331,8 +440,7 @@ class MriHeadFitter(object):
         return inv(T)
 
     def get_trans_fname(self, s_to):
-        path = self._paths['trans']
-        return path.format(sub=s_to)
+        return self._trans_fname.format(sub=s_to)
 
     def save(self, s_to=None, surf=True, homog=True,
              setup_fwd=True, overwrite=False):
@@ -451,100 +559,6 @@ class MriHeadFitter(object):
             for ico in paths['ico']:
                 self._mne_setup_forward_model(s_to, ico, surf=surf,
                                               homog=homog, block=block)
-
-    def _find_paths(self):
-        s_from = self.s_from
-
-        s_dir = os.path.join(self.subjects_dir, '{sub}')
-        paths = {'s_dir': s_dir}
-
-        # directories to create
-        bem_dir = os.path.join(s_dir, 'bem')
-        surf_dir = os.path.join(s_dir, 'surf')
-        lbl_dir = os.path.join(s_dir, 'label')
-
-        paths['dirs'] = [bem_dir, surf_dir]
-
-        bem_path = os.path.join(bem_dir, '{name}.{ext}')
-        surf_path = os.path.join(surf_dir, '{name}')
-
-        # trans
-        raw_dir = os.path.dirname(self._raw_fname)
-        paths['trans'] = os.path.join(raw_dir, '{sub}-trans.fif')
-
-        # surf/ files
-        paths['surf'] = surf = []
-        surf_names = ('orig', 'orig_avg',
-                      'inflated', 'inflated_avg', 'inflated_pre',
-                      'pial', 'pial_avg',
-                      'smoothwm',
-                      'white', 'white_avg',
-                      'sphere', 'sphere.reg', 'sphere.reg.avg')
-        for name in surf_names:
-            for hemi in ('lh.', 'rh.'):
-                fname = surf_path.format(sub='{sub}', name=hemi + name)
-                surf.append(fname)
-
-        # watershed files
-        for name in ['inner_skull', 'outer_skull', 'outer_skin']:
-            fname = bem_path.format(sub='{sub}', name=name, ext='surf')
-            surf.append(fname)
-
-        # bem files
-        paths['bem'] = bem = []
-        path = os.path.join(self.subjects_dir, '{sub}', 'bem', '{sub}-{name}.fif')
-        for name in ['head']:
-            fname = path.format(sub='{sub}', name=name)
-            bem.append(fname)
-
-        # fiducials
-        fname = path.format(sub='{sub}', name='fiducials')
-        paths['fid'] = [fname]
-
-        # check presence of required files
-        for ftype in ['surf', 'bem', 'fid']:
-            for fname in paths[ftype]:
-                src = fname.format(sub=s_from)
-                if not os.path.exists(src):
-                    raise IOError("Required file not found: %r" % src)
-
-        # src
-        paths['ico'] = icos = []
-        paths['src'] = src = []
-        basename = '{sub}-ico-{ico}-src.fif'
-        path = os.path.join(bem_dir, basename)
-        p = re.compile('\A' + basename.format(sub=s_from, ico='(\d+)'))
-        for name in os.listdir(bem_dir.format(sub=s_from)):
-            match = p.match(name)
-            if match:
-                ico = int(match.group(1))
-                icos.append(ico)
-                fname = path.format(sub='{sub}', ico=ico)
-                src.append(fname)
-        if len(src) == 0:
-            raise IOError("No source space found.")
-
-        # labels
-        paths['lbl'] = lbls = []
-        top = lbl_dir.format(sub=s_from)
-        relpath_start = len(top) + 1
-        for dirp, _, files in os.walk(top):
-            files = fnmatch.filter(files, '*.label')
-            dirname = os.path.join(lbl_dir, dirp[relpath_start:])
-            for basename in files:
-                lbls.append(os.path.join(dirname, basename))
-            paths['dirs'].append(dirname)
-
-
-
-        # duplicate curvature files
-        paths['duplicate'] = dup = []
-        path = os.path.join(surf_dir, '{name}')
-        for name in ['lh.curv', 'rh.curv']:
-            fname = path.format(sub='{sub}', name=name)
-            dup.append(fname)
-
-        return paths
 
     def _mne_setup_forward_model(self, s_to, ico, surf=True, homog=True,
                                  block=False):
