@@ -23,6 +23,90 @@ from .coreg import MriHeadFitter
 from ..fiff import Raw
 
 
+def raw_find_point(raw):
+    raw = Raw(raw)
+    dig = raw.info['dig']
+    pts = filter(lambda d: d['kind'] == 4, dig)
+    pts = np.array([d['r'] for d in pts])
+    return FindDigPoint(pts)
+
+class FindDigPoint(traits.HasTraits):
+    """
+    Mayavi viewer for fitting an MRI to a digitized head shape.
+
+    """
+    right = traits.Button()
+    front = traits.Button()
+    left = traits.Button()
+    top = traits.Button()
+
+    # parameters
+    point = traits.Range(low=0, high=10000, is_float=True, mode='spinner')
+
+    scene = traits.Instance(MlabSceneModel, ())
+
+    view = View(Item('scene', editor=SceneEditor(scene_class=MayaviScene),
+                     height=500, width=500, show_label=False),
+                HGroup('72', 'top', show_labels=False),
+                HGroup('right', 'front', 'left', show_labels=False),
+                '_',
+                VGroup('point'),
+                )
+
+    def __init__(self, pts):
+        self._orig_pts = pts
+        pts = pts * 1000
+        self.pts = pts
+
+        traits.HasTraits.__init__(self)
+        self.configure_traits()
+
+    @traits.on_trait_change('scene.activated')
+    def on_init(self):
+        d = Delaunay(self.pts)
+        tri = d.convex_hull
+        x, y, z = self.pts.T
+
+        fig = self.scene.mayavi_scene
+        mesh = pipeline.triangular_mesh_source(x, y, z, tri, figure=fig)
+        surf = pipeline.surface(mesh, figure=fig, color=(1, 1, 1),
+                                representation='wireframe', line_width=1)
+        surf.actor.property.lighting = False
+
+        self.src = pipeline.scalar_scatter(0, 0, 0)
+        self.glyph = pipeline.glyph(self.src, color=(1, 0, 0), figure=fig,
+                                    scale_factor=10)
+
+        self.point = 0
+
+    @traits.on_trait_change('point')
+    def on_update_point(self):
+        self.scene.disable_render = True
+
+        self.src.data.points[0] = self.pts[int(self.point)]
+        self.glyph.remove()
+        fig = self.scene.mayavi_scene
+        self.glyph = pipeline.glyph(self.src, color=(1, 0, 0), figure=fig,
+                                    scale_factor=10)
+
+        self.scene.disable_render = False
+
+    @traits.on_trait_change('top,left,right,front')
+    def on_set_view(self, view='front', info=None):
+        self.scene.parallel_projection = True
+        self.scene.camera.parallel_scale = 150
+        kwargs = dict(azimuth=90, elevation=90, distance=None, roll=180,
+                      reset_roll=True, figure=self.scene.mayavi_scene)
+        if view == 'left':
+            kwargs.update(azimuth=180, roll=90)
+        elif view == 'right':
+            kwargs.update(azimuth=0, roll=270)
+        elif view == 'top':
+            kwargs.update(elevation=0)
+        self.scene.mlab.view(**kwargs)
+
+
+
 def raw_hs(raw):
     raw = Raw(raw)
     dig = raw.info['dig']
