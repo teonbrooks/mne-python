@@ -7,15 +7,143 @@
 import os
 
 import numpy as np
+from scipy.cluster.hierarchy import linkage, to_tree, leaves_list
+from scipy.spatial import Delaunay
+from scipy.spatial.distance import pdist
 
-from mayavi.tools.mlab_scene_model import MlabSceneModel
 from mayavi.core.ui.mayavi_scene import MayaviScene
+from mayavi.tools import pipeline
+from mayavi.tools.mlab_scene_model import MlabSceneModel
 from pyface.api import error, confirm, YES, NO, CANCEL, ProgressDialog
 import traits.api as traits
-from traitsui.api import View, Item, HGroup
+from traitsui.api import View, Item, HGroup, VGroup
 from tvtk.pyface.scene_editor import SceneEditor
 
 from .coreg import MriHeadFitter
+from ..fiff import Raw
+
+
+def raw_hs(raw):
+    raw = Raw(raw)
+    dig = raw.info['dig']
+    pts = filter(lambda d: d['kind'] == 4, dig)
+    pts = np.array([d['r'] for d in pts])
+    return FixDigHeadShape(pts)
+
+class FixDigHeadShape(traits.HasTraits):
+    """
+    Mayavi viewer for fitting an MRI to a digitized head shape.
+
+    """
+    right = traits.Button()
+    front = traits.Button()
+    left = traits.Button()
+    top = traits.Button()
+
+    # parameters
+    clusters = traits.Range(low=0, high=20, is_float=False, mode='spinner')
+
+    # saving
+    cancel = traits.Button()
+    ok = traits.Button()
+
+    scene = traits.Instance(MlabSceneModel, ())
+
+    view = View(Item('scene', editor=SceneEditor(scene_class=MayaviScene),
+                     height=500, width=500, show_label=False),
+                HGroup('72', 'top', show_labels=False),
+                HGroup('right', 'front', 'left', show_labels=False),
+                '_',
+                VGroup('clusters'),
+                '_',
+                HGroup('cancel', 'ok', show_labels=False),
+                )
+
+    def __init__(self, pts):
+        self._orig_pts = pts
+        pts = pts * 1000
+        self.pts = pts
+
+        cdist = pdist(pts, metric='euclidean', p=2, w=None, V=None, VI=None)
+        z = linkage(cdist, method='single')
+        self._root = to_tree(z)
+        self._leaves = leaves_list(z)
+
+        self._sel = None
+        self._plots = []
+        self._all_idx = np.arange(len(pts))
+        traits.HasTraits.__init__(self)
+        self.configure_traits()
+
+    @traits.on_trait_change('scene.activated')
+    def on_init(self):
+        self.clusters = 0
+
+    @traits.on_trait_change('clusters')
+    def on_update_clusters(self):
+        self.scene.disable_render = True
+        if hasattr(self, 'mesh'):
+            self.mesh.remove()
+            del self.mesh
+            self.surf.remove()
+            del self.surf
+        if hasattr(self, 'rmesh'):
+            self.rmesh.remove()
+            del self.rmesh
+            self.rsurf.remove()
+            del self.rsurf
+
+        node = self._root
+        rnode = None  # rejected node
+        i = 0
+        i_last = 0
+        for _ in xrange(self.clusters):
+            rnode = node.left
+            node = node.right
+            i_last = i
+            i += rnode.count
+            if node.is_leaf():
+                return
+
+        self.i = (i, i_last)
+        sel = np.sort(self._leaves[i:])
+        pts = self.pts[sel]
+        self.mesh, self.surf = self._plot_pts(pts)
+
+        if rnode is not None:
+            rsel = np.sort(self._leaves[i_last:i])
+            pts = self.pts[rsel]
+            if len(pts) > 2:
+                self.rmesh, self.rsurf = self._plot_pts(pts, color=(1, 0, 0))
+
+        self.scene.disable_render = False
+
+    @traits.on_trait_change('top,left,right,front')
+    def on_set_view(self, view='front', info=None):
+        self.scene.parallel_projection = True
+        self.scene.camera.parallel_scale = 150
+        kwargs = dict(azimuth=90, elevation=90, distance=None, roll=180,
+                      reset_roll=True, figure=self.scene.mayavi_scene)
+        if view == 'left':
+            kwargs.update(azimuth=180, roll=90)
+        elif view == 'right':
+            kwargs.update(azimuth=0, roll=270)
+        elif view == 'top':
+            kwargs.update(elevation=0)
+        self.scene.mlab.view(**kwargs)
+
+    def _plot_pts(self, pts, color=(1, 1, 1)):
+        d = Delaunay(pts)
+        tri = d.convex_hull
+        x, y, z = pts.T
+
+        fig = self.scene.mayavi_scene
+        mesh = pipeline.triangular_mesh_source(x, y, z, tri, figure=fig)
+        surf = pipeline.surface(mesh, figure=fig, color=color,  # opacity=1,
+                                representation='wireframe', line_width=1)
+        surf.actor.property.lighting = False
+
+        return mesh, surf
 
 
 
