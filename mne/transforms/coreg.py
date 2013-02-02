@@ -196,6 +196,226 @@ def find_mri_paths(subject='fsaverage', subjects_dir=None):
 
 
 
+class HeadMriFitter(object):
+    """Fit the head shape to an mri (create a head mri trans file)
+    """
+    def __init__(self, raw, subject=None, subjects_dir=None):
+        """
+        Parameters
+        ----------
+        raw : Raw | str(path)
+            The Raw object or the path to the raw file containing the digitizer
+            data.
+        subject : None | str
+            name of the mri subject (e.g., 'fsaverage').
+            Can be None if the raw file-name starts with "{subject}_".
+        subjects_dir : None | path
+            Override the SUBJECTS_DIR environment variable
+            (sys.environ['SUBJECTS_DIR'])
+
+        """
+        subjects_dir = get_subjects_dir(subjects_dir, True)
+
+        # resolve raw
+        if isinstance(raw, basestring):
+            raw_fname = raw
+            raw = Raw(raw_fname)
+        else:
+            raw_fname = raw.info['filename']
+        raw_fname = raw_fname
+
+        # resolve subject
+        if subject is None:
+            _, tail = os.path.split(raw_fname)
+            subject = tail.split('_')[0]
+
+        # resolve mri subject path
+        mri_sdir = os.path.join(subjects_dir, subject)
+        if not os.path.exists(mri_sdir):
+            err = ("Subject mri directory for %r not found "
+                   "(%r)" % (subject, mri_sdir))
+            raise ValueError(err)
+
+        # mri head shape
+        fname = os.path.join(mri_sdir, 'bem', '%s-%s.fif' % (subject, 'head'))
+        self.mri_hs = geom_bem(fname, unit='m')
+
+        # mri fiducials
+        fname = os.path.join(mri_sdir, 'bem', subject + '-fiducials.fif')
+        if not os.path.exists(fname):
+            err = ("Now fiducials file found for %r (%r). Use XXX() "
+                   "to create one." % (subject, fname))
+            raise ValueError(err)
+        dig, _ = read_fiducials(fname)
+        self.mri_fid = geom_fid(dig, unit='m')
+
+        # digitizer data from raw
+        self.dig_hs = geom_dig_hs(raw.info['dig'], unit='m')
+        self.dig_fid = geom_fid(raw.info['dig'], unit='m')
+
+        # move to head to the mri's nasion
+        self._t_origin_mri = translation(*self.mri_fid.nas)
+        self._t_dig_origin = translation(*(-self.dig_fid.nas))
+
+        # store attributes
+        self._subject = subject
+        self._raw_dir = os.path.dirname(raw_fname)
+        self._subjects_dir = subjects_dir
+        self.set(rot=(0, 0, 0), trans=(0, 0, 0))
+
+    def _error(self, dig_trans, mri_trans=None):
+        """
+        For each point in the head shape, the distance to the closest point in
+        the mri.
+
+        Parameters
+        ----------
+        dig_trans : None | array, shape = (4, 4)
+            The transformation matrix that is applied to the digitizer head
+            shape.
+        mri_trans : None | array, shape = (4, 4)
+            The transformation matrix that is applied to the mri.
+        """
+        pts = self.dig_hs.get_pts(dig_trans)
+        pts0 = self.mri_hs.get_pts(mri_trans)
+        Y = cdist(pts, pts0, 'euclidean')
+        dist = Y.min(axis=1)
+        return dist
+
+    def fit(self, move=False, **kwargs):
+        """Fit the head to the mri using rotation and optionally translation
+
+        Parameters
+        ----------
+        move : bool
+            Also include translation parameters in the fit. If False, only
+            rotation around the nasion is permitted.
+        kwargs:
+            scipy.optimize.leastsq kwargs
+
+        http://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.leastsq.html
+        """
+        if 'epsfcn' not in kwargs:
+            kwargs['epsfcn'] = 0.01
+
+        t_dig_origin = self._t_dig_origin
+        t_origin_mri = self._t_origin_mri
+        if move:
+            x0 = np.hstack((self._rot, self._trans))
+            def error(x):
+                rx, ry, rz, tx, ty, tz = x
+                trans = reduce(dot, (t_origin_mri, translation(tx, ty, tz), rotation(rx, ry, rz),
+                                     t_dig_origin))
+                err = self._error(trans)
+                logger.debug("x = %s -> Error = "
+                             "%s" % (x, np.sum(err ** 2)))
+                return err
+        else:
+            x0 = self._rot
+            t_origin_mri = dot(t_origin_mri, self._t_trans)
+            def error(x):
+                rx, ry, rz = x
+                trans = reduce(dot, (t_origin_mri, rotation(rx, ry, rz),
+                                     t_dig_origin))
+                err = self._error(trans)
+                logger.debug("x = %s -> Error = "
+                             "%s" % (x, np.sum(err ** 2)))
+                return err
+
+        x_est, self.info = leastsq(error, x0, **kwargs)
+
+        if move:
+            self.set(rot=x_est[:3], trans=x_est[3:])
+        else:
+            self.set(rot=x_est)
+        return x_est
+
+    def get_head_mri_trans(self):
+        trans = reduce(dot, (self._t_origin_mri, self._t_trans, self._t_rot,
+                             self._t_dig_origin))
+        return trans
+
+    def plot(self, size=(512, 512), fig=None):
+        if fig is None:
+            from mayavi import mlab
+            fig = mlab.figure(size=size)
+
+        self.fig = fig
+        self.mri_hs.plot_solid(fig)
+        self.mri_fid.plot_points(fig, scale=.005)
+        self.dig_hs.plot_solid(fig, opacity=1., rep='wireframe',
+                               color=(.5, .5, 1))
+        self.dig_fid.plot_points(fig, scale=.04, opacity=.25,
+                                 color=(.5, .5, 1))
+        return fig
+
+    def save_trans(self, fname=None, overwrite=False):
+        """Save the trans file
+
+        Parameters
+        ----------
+        fname : str(path) | None
+            Target file name. With None, a filename is constructed out of the
+            directory of the raw file provided on initialization, the mri
+            subject, and the suffix `-trans.fif`.
+        overwrite : bool
+            If a file already exists at the specified location, overwrite it.
+
+        """
+        if fname is None:
+            name = self._subject + '-trans.fif'
+            fname = os.path.join(self._raw_dir, name)
+
+        if os.path.exists(fname):
+            if overwrite:
+                os.remove(fname)
+            else:
+                err = ("File already exists: %r" % fname)
+                raise IOError(err)
+
+        # in m
+        trans = self.get_head_mri_trans()
+        dig = deepcopy(self.dig_fid.source_dig)  # these are in m
+        for d in dig:  # [in m]
+            d['r'] = apply(trans, d['r'])
+        trans = {'to': FIFF.FIFFV_COORD_MRI, 'from': FIFF.FIFFV_COORD_HEAD,
+                'trans': trans, 'dig': dig}
+        write_trans(fname, trans)
+
+    def set(self, rot=None, trans=None):
+        """Set the transformation parameters
+
+        Parameters
+        ----------
+        rot : None | tuple of (x, y, z)
+            Rotation parameters.
+        trans : None | tuple of (x, y, z)
+            Translation parameters.
+        """
+        if rot is not None:
+            rot = np.asarray(rot, dtype=float)
+            if rot.shape != (3,):
+                raise ValueError("rot parameter needs to be of shape (3,), "
+                                 "not %r" % rot.shape)
+            self._t_rot = rotation(*rot)
+            self._rot = rot
+        if trans is not None:
+            trans = np.asarray(trans, dtype=float)
+            if trans.shape != (3,):
+                raise ValueError("trans parameter needs to be of shape (3,), "
+                                 "not %r" % trans.shape)
+            self._t_trans = translation(*trans)
+            self._trans = trans
+        self.update()
+
+    def update(self):
+        """Update the transform and any plots"""
+        trans = self.get_head_mri_trans()
+        for g in [self.dig_hs, self.dig_fid]:
+            g.set_trans(trans)
+
+
+
 class MriHeadFitter(object):
     """
     Fit an MRI to a head shape model.
