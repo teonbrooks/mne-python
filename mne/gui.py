@@ -2,7 +2,7 @@
 
 
 
-def coregister_head_to_mri(raw, subject=None, subjects_dir=None):
+def coregistration(raw, subject=None, subjects_dir=None):
     """Open a gui for scaling an mri to fit a subject's head shape.
 
     Parameters
