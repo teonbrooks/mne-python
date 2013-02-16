@@ -19,6 +19,7 @@ from shutil import rmtree
 import atexit
 from math import log
 import json
+from subprocess import check_output, CalledProcessError
 import urllib2
 import urlparse
 from scipy import linalg
@@ -661,3 +662,12 @@ def _check_fname(fname, overwrite):
                           '"overwrite=True" to force overwriting.')
         else:
             logger.info('Overwriting existing file.')
+
+
+def run_subprocess(cmd, **kwargs):
+    try:
+        print check_output(cmd, **kwargs)
+    except CalledProcessError as err:
+        print "Error:\n======="
+        print err.output
+        raise err
