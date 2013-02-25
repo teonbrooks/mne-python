@@ -10,7 +10,6 @@ from glob import iglob
 import os
 import re
 import shutil
-from subprocess import check_output, CalledProcessError
 
 import logging
 from mne.utils import get_config
@@ -82,6 +81,59 @@ def create_default_subject(subject='fsaverage', mne_root=None, fs_home=None,
     # run mne setup commands
     setup_mri(subject, subjects_dir=subjects_dir)
     watershed_bem(subject, subjects_dir=subjects_dir)
+
+
+def decimate_headshape(pts, res=10):
+    """Decimate the number of points making up a headshape model
+
+    Create a voxel grid with a specified resolution and retain only one point
+    per voxel. For each voxel, the point closest to its center is retained.
+
+    Parameters
+    ----------
+    pts : array, shape = (n_points, 3)
+        The points making up the head shape.
+    res : scalar
+        The resolution of the voxel space (side length of each voxel).
+
+    Returns
+    -------
+    pts : array, shape = (n_points, 3)
+        The decimated points.
+    """
+    pts = np.asarray(pts)
+
+    # find the bin edges for the voxel space
+    xmin, ymin, zmin = pts.min(0) - res / 2.
+    xmax, ymax, zmax = pts.max(0) + res
+    xax = np.arange(xmin, xmax, res)
+    yax = np.arange(ymin, ymax, res)
+    zax = np.arange(zmin, zmax, res)
+
+    # find voxels containing one or more point
+    H, _ = np.histogramdd(pts, bins=(xax, yax, zax), normed=False)
+
+    # for each voxel, select one point
+    X, Y, Z = pts.T
+    out = np.empty((np.sum(H > 0), 3))
+    for i, (xbin, ybin, zbin) in enumerate(zip(*np.nonzero(H))):
+        x = xax[xbin]
+        y = yax[ybin]
+        z = zax[zbin]
+        xi = np.logical_and(X >= x, X < x + res)
+        yi = np.logical_and(Y >= y, Y < y + res)
+        zi = np.logical_and(Z >= z, Z < z + res)
+        idx = np.logical_and(zi, np.logical_and(yi, xi))
+        ipts = pts[idx]
+
+        mid = np.array([x, y, z]) + res / 2.
+        dist = cdist(ipts, [mid])
+        i_min = np.argmin(dist)
+        ipt = ipts[i_min]
+        out[i] = ipt
+
+    return out
+
 
 
 def fit_matched_pts(src_pts, tgt_pts, tol=None, params=False):

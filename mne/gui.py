@@ -42,6 +42,13 @@ def coregistration(raw, subject=None, trans_fname=_trans, subjects_dir=None):
     return gui
 
 
+def decimate_headshape(hsp=None):
+    from .transforms.headshape_gui import MainWindow
+    gui = MainWindow(hsp)
+    gui.configure_traits()
+    return gui
+
+
 def fit_mri_to_head(raw, s_from='fsaverage', s_to=None, trans_fname=_trans,
                     subjects_dir=None):
     """Open a gui for head-mri coregistration
