@@ -4,14 +4,17 @@
 #
 # License: BSD (3-clause)
 
-from struct import unpack
+from datetime import datetime
+import cPickle as pickle
 from os import SEEK_CUR, path
 import re
-import cPickle as pickle
+from struct import unpack
+
 import numpy as np
 from scipy import linalg
+
+from ... import __version__
 from ..constants import FIFF
-from ...transforms.transforms import apply_trans, rotation, translation
 from .constants import KIT
 
 
@@ -190,6 +193,30 @@ def read_hsp(hsp_fname, max_n=KIT.DIG_POINTS):
     else:
         raise TypeError('File must be either *.txt or *.pickled.')
     return hsp_points
+
+
+def write_hsp(fname, pts):
+    """Write a headshape hsp file
+
+    Parameters
+    ----------
+    fname : str
+        Target file.
+    pts : array, shape = (n_pts, 3)
+        Points comprising the headshape.
+    """
+    pts = np.asarray(pts)
+    if (pts.ndim != 2) or (pts.shape[1] != 3):
+        err = "pts must be of shape (n_pts, 3), not %r" % str(pts.shape)
+        raise ValueError(err)
+
+    with open(fname, 'w') as fid:
+        version = __version__
+        now = datetime.now().strftime("%I:%M%p on %B %d, %Y")
+        fid.write("% Ascii 3D points file created by mne-python version "
+                  "{version} at {now}\n".format(version=version, now=now))
+        fid.write("% {N} 3D points, x y z per line\n".format(N=len(pts)))
+        np.savetxt(fid, pts, '%8.2f', ' ')
 
 
 def read_sns(sns_fname):
