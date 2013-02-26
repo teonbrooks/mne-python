@@ -1,5 +1,7 @@
 """Convenience functions for opening guis."""
 
+import os as _os
+
 from .transforms.coreg import trans_fname as _trans
 
 
@@ -42,10 +44,19 @@ def coregistration(raw, subject=None, trans_fname=_trans, subjects_dir=None):
     return gui
 
 
-def decimate_headshape(hsp=None):
+def headshape(hsp=None):
+    """GUI for decimating the number of points in a headshape file
+
+    Parameters
+    ----------
+    hsp : None | str
+        Path to the source hsp file.
+    """
     from .transforms.headshape_gui import MainWindow
-    gui = MainWindow(hsp)
+    gui = MainWindow()
     gui.configure_traits()
+    if (hsp is not None) and _os.path.exists(hsp):
+        gui.headshape.file = hsp
     return gui
 
 
