@@ -214,10 +214,20 @@ class MarkerPointDest(MarkerPoints):
         return self.src1.dir
 
     def _get_name(self):
-        i = 0
         n1 = self.src1.name
         n2 = self.src2.name
+        if n1 == n2:
+            return n1
+
+        i = 0
+        l1 = len(n1) - 1
+        l2 = len(n1) - 2
         while n1[i] == n2[i]:
+            if i == l1:
+                return n1
+            elif i == l2:
+                return n2
+
             i += 1
 
         return n1[:i]
