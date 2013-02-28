@@ -42,6 +42,7 @@ class MarkerPoints(HasTraits):
     label = Bool(False)
     color = Color()
     rgbcolor = Property(Tuple(Float, Float, Float), depends_on='color')
+    visible = Bool(True)
     save_as = Button()
 
     file = File
@@ -90,13 +91,14 @@ class MarkerPoints(HasTraits):
 
         x, y, z = self.points.T
         src = pipeline.scalar_scatter(x, y, z)
-        glyph = pipeline.glyph(src, color=self.rgbcolor, figure=fig, scale_factor=scale,
-                               opacity=1.)
+        glyph = pipeline.glyph(src, color=self.rgbcolor, figure=fig,
+                               scale_factor=scale, opacity=1.)
         self.glyph = glyph
         self.src = src
 
         self.sync_trait('rgbcolor', self.glyph.actor.property, 'color', mutual=False)
         self.sync_trait('points', self.src.data, 'points', mutual=False)
+        self.sync_trait('visible', self.glyph, 'visible', mutual=False)
 
     def _save_as_fired(self):
         dlg = FileDialog(action="save as", wildcard=out_wildcard,
@@ -133,6 +135,18 @@ class MarkerPointSource(MarkerPoints):
     file = File(filter=['*.sqd'], exists=True)
     use = List(range(5), desc="Which points to use for the interpolated "
                "marker.")
+    enabled = Property(Bool, depends_on=['points', 'use'])
+    visible = Property(Bool, depends_on=['enabled'])
+
+    def _get_enabled(self):
+        if np.all(self.points == 0):
+            return False
+        if not self.use:
+            return False
+        return True
+
+    def _get_visible(self):
+        return self.enabled
 
     view = View(VGroup(Item('name', style='readonly'),
                        'file',
@@ -192,8 +206,17 @@ class MarkerPointDest(MarkerPoints):
 
         return n1[:i]
 
-    @on_trait_change('method')
+    @on_trait_change('method, src1.points, src1.use, src2.points, src2.use')
     def update(self):
+        # if only one source is enabled, use that
+        if not (self.src1 and self.src1.enabled):
+            if (self.src2 and self.src2.enabled):
+                self.points = self.src2.points
+            return
+        elif not (self.src2 and self.src2.enabled):
+            self.points = self.src1.points
+            return
+
         if self.method == 'Average':
             if len(np.union1d(self.src1.use, self.src2.use)) < 5:
                 error("Need at least one source for each point.")
@@ -233,7 +256,7 @@ class MarkerPointDest(MarkerPoints):
 
 
 
-class ControlPanel(HasTraits):
+class MarkerPanel(HasTraits):
     """Has two marker points sources and interpolates to a third one"""
     mrk1 = File
     mrk2 = File
@@ -241,10 +264,6 @@ class ControlPanel(HasTraits):
     markers_2 = Instance(MarkerPointSource)
     markers = Instance(MarkerPointDest)
     scene = Instance(MlabSceneModel, ())
-    head_view = Instance(HeadViewController)
-
-    def _head_view_default(self):
-        return HeadViewController(scene=self.scene, system='ALS')
 
     def _markers_default(self):
         mrk = MarkerPointDest(scene=self.scene, src1=self.markers_1,
@@ -266,21 +285,16 @@ class ControlPanel(HasTraits):
     view = View(VGroup(Item('markers_1', springy=True, style='custom'),
                        Item('markers_2', style='custom'),
                        Item('markers', style='custom'),
-                       Item('head_view', style='custom'),
                        show_labels=False,
                        ))
 
     @on_trait_change('scene.activated')
     def _init_plot(self):
-        self.markers_1.plot_points(color=(.1, .9, 1))
-        self.markers_2.plot_points(color=(1, .5, .1))
-        self.markers.plot_points(color=(0, 0, 0))
+        scale = 5e-3
+        self.markers_1.plot_points(color=(.1, .9, 1), scale=scale)
+        self.markers_2.plot_points(color=(1, .5, .1), scale=scale)
+        self.markers.plot_points(color=(0, 0, 0), scale=scale)
         self.markers.update()
-
-        self.markers_1.on_trait_change(self.markers.update, 'points')
-        self.markers_1.on_trait_change(self.markers.update, 'use')
-        self.markers_2.on_trait_change(self.markers.update, 'points')
-        self.markers_2.on_trait_change(self.markers.update, 'use')
 
 
 
@@ -292,15 +306,21 @@ class MainWindow(HasTraits):
     mrk1, mrk2 : str
         Path to pre- and post measurement marker files (*.sqd) or empty string.
     """
-    panel = Instance(ControlPanel)
     scene = Instance(MlabSceneModel, ())
+    head_view = Instance(HeadViewController)
+    panel = Instance(MarkerPanel)
+
+    def _head_view_default(self):
+        return HeadViewController(scene=self.scene, system='ALS')
 
     def _panel_default(self):
-        return ControlPanel(scene=self.scene, mrk1=self._mrk1, mrk2=self._mrk2)
+        return MarkerPanel(scene=self.scene, mrk1=self._mrk1, mrk2=self._mrk2)
 
     view = View(HGroup(Item('scene', editor=SceneEditor(scene_class=MayaviScene),
                             dock='vertical'),
-                       Item('panel', style="custom"),
+                       VGroup(Item('head_view', style='custom'),
+                              Item('panel', style="custom"),
+                              show_labels=False),
                        show_labels=False,
                       ),
                 resizable=True,
