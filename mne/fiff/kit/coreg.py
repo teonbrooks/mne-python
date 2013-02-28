@@ -160,7 +160,7 @@ def read_elp(elp_fname):
     return elp_points
 
 
-def read_hsp(hsp_fname, max_n=KIT.DIG_POINTS):
+def read_hsp(hsp_fname):
     """HSP point extraction in Polhemus head space
 
     Parameters
@@ -183,10 +183,6 @@ def read_hsp(hsp_fname, max_n=KIT.DIG_POINTS):
         hsp_points = p.findall(open(hsp_fname).read())
         hsp_points = np.array(hsp_points, dtype=float)
         # downsample the digitizer points
-        n_pts = len(hsp_points)
-        if (max_n is not None) and (n_pts > max_n):
-            space = int(n_pts / max_n)
-            hsp_points = np.copy(hsp_points[::space])
     elif ext == '.pickled':
         hsp = pickle.load(open(hsp_fname))
         hsp_points = hsp['points']

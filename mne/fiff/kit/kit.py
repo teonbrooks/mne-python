@@ -19,7 +19,7 @@ from ...utils import verbose
 from ..raw import Raw
 from ..constants import FIFF
 from .constants import KIT, KIT_NY, KIT_AD
-from . import coreg
+from .coreg import read_mrk, read_hsp, read_mrk, read_sns, transform_pts
 
 logger = logging.getLogger('mne')
 
@@ -53,8 +53,8 @@ class RawKIT(Raw):
     mne.fiff.Raw : Documentation of attribute and methods.
     """
     @verbose
-    def __init__(self, input_fname, mrk_fname, elp_fname, hsp_fname, sns_fname,
-                 stim, data=None, stimthresh=3.5, verbose=None):
+    def __init__(self, input_fname, stim, sns_fname, mrk=None, elp=None,
+                 hsp=None, data=None, stimthresh=3.5, verbose=None):
 
         logger.info('Extracting SQD Parameters from %s...' % input_fname)
         sqd = _get_sqd_params(input_fname)
@@ -86,11 +86,12 @@ class RawKIT(Raw):
         self.info['dev_head_t']['from'] = FIFF.FIFFV_COORD_DEVICE
         self.info['dev_head_t']['to'] = FIFF.FIFFV_COORD_HEAD
 
-        mrk, elp, self.info['dig'] = coreg.get_points(mrk_fname=mrk_fname,
-                                                      elp_fname=elp_fname,
-                                                      hsp_fname=hsp_fname)
-        self.info['dev_head_t']['trans'] = fit_matched_pts(tgt_pts=mrk,
-                                                           src_pts=elp)
+        if (mrk and elp and hsp):
+            self.set_dig(mrk, elp, hsp)
+        elif (mrk or elp or hsp):
+            err = ("mrk, elp and hsp need to be provided as a group (all or "
+                   "none)")
+            raise ValueError(err)
 
         # Creates a list of dicts of meg channels for raw.info
         logger.info('Setting channel info structure...')
@@ -100,8 +101,8 @@ class RawKIT(Raw):
         ch_names['MISC'] = ['MISC %03d' % ch for ch
                                  in range(1, sqd['KIT'].nmiscchan + 1)]
         ch_names['STIM'] = ['STI 014']
-        locs = coreg.read_sns(sns_fname=sns_fname)
-        chan_locs = coreg.transform_pts(locs[:, :3])
+        locs = read_sns(sns_fname=sns_fname)
+        chan_locs = transform_pts(locs[:, :3])
         chan_angles = locs[:, 3:]
         self.info['chs'] = []
         for idx, ch_info in enumerate(zip(ch_names['MEG'], chan_locs,
@@ -196,8 +197,53 @@ class RawKIT(Raw):
                        float(self.last_samp) / self.info['sfreq']))
         logger.info('Ready.')
 
+    def set_dig(self, elp, hsp, mrk, trans=None, max_hsp_n=KIT.DIG_POINTS):
+        """
+        Set the digitizer data and device head transformation for the Raw
 
-def read_raw_kit(input_fname, mrk_fname, elp_fname, hsp_fname, sns_fname,
+        Parameters
+        ----------
+        mrk : None | array ,shape = (5, 3)
+            Marker points used to estimate the device head transform. If trans
+            is provided, mrk is not used and can be None).
+        trans : None | array, shape = (4, 4)
+            Device head transformation. If None, the transform is estimated
+            using the five marker points.
+        max_hsp_n : None | int
+            Maximum number of head shape points to keep.
+        """
+        if isinstance(hsp, basestring):
+            hsp = read_hsp(hsp)
+
+        n_pts = len(hsp)
+        if (max_hsp_n is not None) and (n_pts > max_hsp_n):
+            space = int(n_pts / max_hsp_n)
+            hsp = np.copy(hsp[::space])
+
+
+
+        mrk, elp, self.info['dig'] = coreg.get_points(mrk_fname=mrk_fname,
+                                                      elp_fname=elp_fname,
+                                                      hsp_fname=hsp_fname)
+
+
+
+        # device head transform
+        if trans is None:
+            if mrk is None:
+                raise ValueError("Trans and mrk can not both be None")
+            trans = fit_matched_pts(tgt_pts=mrk, src_pts=elp)
+        else:
+            trans = np.asarray(trans)
+
+        if not trans.shape == (4, 4):
+            raise ValueError("trans needs to be 4 by 4 array")
+
+        self.info['dev_head_t']['trans'] = trans
+
+
+
+def read_raw_kit(input_fname, mrk, elp, hsp, sns_fname,
                  stim, data=None, stimthresh=3.5, verbose=None):
     """Reader function for KIT conversion to FIF
 
@@ -205,12 +251,13 @@ def read_raw_kit(input_fname, mrk_fname, elp_fname, hsp_fname, sns_fname,
     ----------
     input_fname : str
         Absolute path to the sqd file.
-    mrk_fname : str
-        Absolute path to marker coils file.
-    elp_fname : str
-        Absolute path to elp digitizer laser points file.
-    hsp_fname : str
-        Absolute path to elp digitizer head shape points file.
+    mrk : str | array, shape = (5, 3)
+        Absolute path to marker coils file, or array of points.
+    elp : str | array, shape = (8, 3)
+        Absolute path to elp digitizer laser points file, or array with points.
+    hsp : str | array, shape = (n_pts, 3)
+        Absolute path to elp digitizer head shape points file, or array with
+        points.
     sns_fname : str
         Absolute path to sensor information file.
     stim : list
@@ -222,8 +269,7 @@ def read_raw_kit(input_fname, mrk_fname, elp_fname, hsp_fname, sns_fname,
     verbose : bool, str, int, or None
         If not None, override default verbose level (see mne.verbose).
     """
-    return RawKIT(input_fname=input_fname, mrk_fname=mrk_fname,
-                  elp_fname=elp_fname, hsp_fname=hsp_fname,
+    return RawKIT(input_fname=input_fname, mrk=mrk, elp=elp, hsp=hsp,
                   sns_fname=sns_fname, stim=stim, data=data,
                   stimthresh=stimthresh, verbose=verbose)
 
