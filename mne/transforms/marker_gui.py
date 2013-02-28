@@ -23,6 +23,7 @@ from tvtk.pyface.scene_editor import SceneEditor
 
 from .coreg import fit_matched_pts
 from .transforms import apply_trans, rotation, translation
+from .viewer import HeadViewController
 from ..fiff.kit.coreg import read_mrk
 
 
@@ -32,48 +33,6 @@ out_wildcard = ("Pickled marker coordinates (*.pickled)|*.pickled|"
 out_ext = ['.pickled', '.hpi']
 
 use_editor = CheckListEditor(cols=1, values=[(i, str(i)) for i in xrange(5)])
-
-
-
-class ALSHeadViewController(HasTraits):
-    """Set head views for Anterior-Left-Superior coordinate system"""
-    right = Button()
-    front = Button()
-    left = Button()
-    top = Button()
-    view_scale = Float(0.13)
-
-    scene = Instance(MlabSceneModel)
-
-    view = View(Group(HGroup('72', Item('top', show_label=False), '100',
-                             Item('view_scale', label='Scale')),
-                      HGroup('right', 'front', 'left', show_labels=False),
-                      label='View', show_border=True))
-
-    @on_trait_change('scene.activated')
-    def _init_view(self):
-        self.scene.camera.view_up = (0, 0, 1)
-        self.sync_trait('view_scale', self.scene.camera, 'parallel_scale')
-        self.view_scale = 0.16
-        self.front = True
-
-    @on_trait_change('view_scale')
-    def _on_view_scale_update(self):
-        self.scene.camera.parallel_scale = self.view_scale
-        self.scene.render()
-
-    @on_trait_change('top,left,right,front')
-    def on_set_view(self, view='front', info=None):
-        self.scene.parallel_projection = True
-        kwargs = dict(azimuth=0, elevation=90, distance=None, roll= -90,
-                      reset_roll=True, figure=self.scene.mayavi_scene)
-        if view == 'left':
-            kwargs.update(azimuth=90, elevation=90, roll=180)
-        elif view == 'right':
-            kwargs.update(azimuth= -90, elevation=90, roll=0)
-        elif view == 'top':
-            kwargs.update(azimuth=0, elevation=0, roll= -90)
-        self.scene.mlab.view(**kwargs)
 
 
 
@@ -190,6 +149,7 @@ class MarkerPointSource(MarkerPoints):
     def load(self, fname):
         pts = read_mrk(fname)
         self.points = pts
+        self.scene.reset_zoom()
 
 
 
@@ -281,10 +241,10 @@ class ControlPanel(HasTraits):
     markers_2 = Instance(MarkerPointSource)
     markers = Instance(MarkerPointDest)
     scene = Instance(MlabSceneModel, ())
-    head_view = Instance(ALSHeadViewController)
+    head_view = Instance(HeadViewController)
 
     def _head_view_default(self):
-        return ALSHeadViewController(scene=self.scene)
+        return HeadViewController(scene=self.scene, system='ALS')
 
     def _markers_default(self):
         mrk = MarkerPointDest(scene=self.scene, src1=self.markers_1,
