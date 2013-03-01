@@ -19,23 +19,33 @@ from traitsui.api import View, Item, Group, HGroup, VGroup, CheckListEditor
 from traitsui.menu import NoButtons
 from tvtk.pyface.scene_editor import SceneEditor
 
-from .marker_gui import use_editor
-from .marker_gui import MarkerPanel
-from .viewer import HeadViewController
+from .marker_gui import MarkerPanel, MarkerPointDest
+from .coreg import fit_matched_pts
+from .viewer import HeadViewController, PointObject
 from ..fiff.kit.coreg import read_hsp, write_hsp
+
+
+
+use_editor = CheckListEditor(cols=5, values=[(i, str(i)) for i in xrange(5)])
 
 
 class Kit2FiffPanel(HasTraits):
     """Control panel for kit2fiff conversion"""
     # Source Files
-    sqd = File(exists=True, filter=['*.sqd'])
-    hsp = File(exists=True, filter=['*.pickled', '*.txt'], desc="Digitizer "
-               "head shape")
-    fid = File(exists=True, filter=['*.txt'], desc="Digitizer fiducials")
+    sqd_file = File(filter=['*.sqd'])
+    hsp_file = File(exists=True, filter=['*.pickled', '*.txt'],
+                    desc="Digitizer head shape")
+    fid_file = File(exists=True, filter=['*.txt'], desc="Digitizer fiducials")
+
+    mrk = Array(float, shape=(5, 3))
 
     # Marker Points
     use_mrk = List(range(5), desc="Which marker points to use for the device "
                    "head coregistration.")
+
+    hsp_src = Property(Array(float, shape=(None, 3)), depends_on=['hsp_file'])  # hsp in neuromag
+    dev_head_trans = Property(Array(float, shape=(4, 4)), depends_on=['use_mrk', 'fid_file', 'mrk'])
+    hsp_dst = Property(Array(float, shape=(None, 3)), depends_on=['hsp_src', 'dev_head_trans'])  # hsp in neuromag
 
     # Events
     events = Array(Int, shape=(None,), value=[])
@@ -65,6 +75,18 @@ class Kit2FiffPanel(HasTraits):
             count.append('%3i: %i' % (i, n))
 
         return os.linesep.join(count)
+
+    def _get_hsp_src(self):
+        if os.path.exists(self.hsp_file):
+            pts = read_hsp(self.hsp_file)
+            return pts
+        else:
+            return np.empty((0, 3))
+    
+    def _get_dev_head_trans(self):
+        if 
+        
+        trans = fit_matched_pts(src_pts, tgt_pts, params=False)
 
 
 class ControlPanel(HasTraits):
