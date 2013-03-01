@@ -137,6 +137,7 @@ class MarkerPointSource(MarkerPoints):
                "marker.")
     enabled = Property(Bool, depends_on=['points', 'use'])
     visible = Property(Bool, depends_on=['enabled'])
+    clear = Button(desc="Clear the current marker data")
 
     def _get_enabled(self):
         if np.all(self.points == 0):
@@ -156,6 +157,7 @@ class MarkerPointSource(MarkerPoints):
                               ),
                        HGroup('label',
                               Item('color', show_label=False),
+                              Item('clear', show_label=False),
                               Item('save_as', show_label=False)),
                        show_border=True, label="Source Marker"))
 
@@ -164,6 +166,9 @@ class MarkerPointSource(MarkerPoints):
         pts = read_mrk(fname)
         self.points = pts
         self.scene.reset_zoom()
+
+    def _clear_fired(self):
+        self.reset_traits(['file', 'points'])
 
 
 
