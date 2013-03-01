@@ -4,9 +4,10 @@
 #
 # License: BSD (3-clause)
 
+from mayavi.mlab import pipeline
 from mayavi.tools.mlab_scene_model import MlabSceneModel
-from traits.api import HasTraits, on_trait_change, Instance, Button, Enum, \
-                       Float
+from traits.api import HasTraits, on_trait_change, Instance, Property, \
+                       Array, Bool, Button, Color, Enum, Float, Str, Tuple
 from traitsui.api import View, Item, Group, HGroup
 
 
@@ -95,3 +96,53 @@ class HeadViewController(HasTraits):
 
         self.scene.mlab.view(distance=None, reset_roll=True,
                              figure=self.scene.mayavi_scene, **kwargs)
+
+
+
+class PointObject(HasTraits):
+    """Represent 5 marker points"""
+    points = Array(float, shape=(None, 3))
+    name = Str
+
+    color = Color()
+    rgbcolor = Property(Tuple(Float, Float, Float), depends_on='color')
+    point_scale = Float(10, label='Point Scale')
+    visible = Bool(True)
+
+    scene = Instance(MlabSceneModel, ())
+
+    view = View(HGroup(Item('point_scale', label='Point size'), 'color',
+                       'visible'))
+
+#    view2 = View(HGroup('visible', 'color',
+#                        label="Reference Head Shape",
+#                        show_border=True))
+
+    def _get_rgbcolor(self):
+        return tuple(v / 255. for v in self.color.Get())
+
+    @on_trait_change('scene.activated')
+    def plot_points(self):
+        _scale = self.scene.camera.parallel_scale
+
+        if hasattr(self, 'glyph'):
+            self.glyph.remove()
+        if hasattr(self, 'src'):
+            self.src.remove()
+
+        fig = self.scene.mayavi_scene
+
+        self.info = self.points
+        x, y, z = self.points.T
+        scatter = pipeline.scalar_scatter(x, y, z)
+        glyph = pipeline.glyph(scatter, color=self.rgbcolor, figure=fig,
+                               scale_factor=self.point_scale, opacity=1.)
+        self.src = scatter
+        self.glyph = glyph
+
+        self.sync_trait('points', self.src.data, 'points', mutual=False)
+        self.sync_trait('point_scale', self.glyph.glyph.glyph, 'scale_factor')
+        self.sync_trait('rgbcolor', self.glyph.actor.property, 'color', mutual=False)
+        self.sync_trait('visible', self.glyph, 'visible')
+
+        self.scene.camera.parallel_scale = _scale
