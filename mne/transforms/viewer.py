@@ -8,7 +8,7 @@ from mayavi.mlab import pipeline, text3d
 from mayavi.tools.mlab_scene_model import MlabSceneModel
 import numpy as np
 from traits.api import HasTraits, on_trait_change, Instance, Property, \
-                       Array, Bool, Button, Color, Enum, Float, Str, Tuple
+                       Array, Bool, Button, Color, Enum, Float, Range, Str, Tuple
 from traitsui.api import View, Item, Group, HGroup
 
 from .transforms import apply_trans
@@ -112,6 +112,7 @@ class PointObject(HasTraits):
     color = Color()
     rgbcolor = Property(Tuple(Float, Float, Float), depends_on='color')
     point_scale = Float(10, label='Point Scale')
+    opacity = Range(low=0., high=1., value=1.)
     visible = Bool(True)
     label = Bool(False, enabled_when='visible')
 
@@ -165,10 +166,10 @@ class PointObject(HasTraits):
         self.src = scatter
         self.glyph = glyph
 
-#        self.sync_trait('points', self.src.data, 'points', mutual=False)
         self.sync_trait('point_scale', self.glyph.glyph.glyph, 'scale_factor')
         self.sync_trait('rgbcolor', self.glyph.actor.property, 'color', mutual=False)
         self.sync_trait('visible', self.glyph, 'visible')
+        self.sync_trait('opacity', self.glyph.actor.property, 'opacity')
 
         self.scene.camera.parallel_scale = _scale
 
