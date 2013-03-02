@@ -4,7 +4,7 @@
 #
 # License: BSD (3-clause)
 
-from mayavi.mlab import pipeline
+from mayavi.mlab import pipeline, text3d
 from mayavi.tools.mlab_scene_model import MlabSceneModel
 import numpy as np
 from traits.api import HasTraits, on_trait_change, Instance, Property, \
@@ -107,22 +107,24 @@ class PointObject(HasTraits):
     trans = Array(float, shape=(None, None))
     name = Str
 
+    scene = Instance(MlabSceneModel, ())
+
     color = Color()
     rgbcolor = Property(Tuple(Float, Float, Float), depends_on='color')
     point_scale = Float(10, label='Point Scale')
     visible = Bool(True)
+    label = Bool(False, enabled_when='visible')
 
-    scene = Instance(MlabSceneModel, ())
-
-    view = View(HGroup(Item('point_scale', label='Point size'), 'color',
-                       'visible'))
-
-#    view2 = View(HGroup('visible', 'color',
-#                        label="Reference Head Shape",
-#                        show_border=True))
+    view = View(HGroup(Item('point_scale', label='Size'), 'color',
+                      'visible', 'label'))
 
     def _get_rgbcolor(self):
         return tuple(v / 255. for v in self.color.Get())
+
+    @on_trait_change('visible')
+    def _on_hide(self):
+        if not self.visible:
+            self.label = False
 
     @on_trait_change('points,trans')
     def _update_points(self):
@@ -169,3 +171,23 @@ class PointObject(HasTraits):
         self.sync_trait('visible', self.glyph, 'visible')
 
         self.scene.camera.parallel_scale = _scale
+
+    @on_trait_change('label')
+    def _show_labels(self, show):
+        self.scene.disable_render = True
+        if hasattr(self, '_text3d'):
+            for text in self._text3d:
+                text.remove()
+            del self._text3d
+
+        if show:
+            self._text3d = []
+            fig = self.scene.mayavi_scene
+            for i, pt in enumerate(np.array(self.points)):
+                x, y, z = pt
+                t = text3d(x, y, z, ' %i' % i, scale=.01, color=self.rgbcolor,
+                           figure=fig)
+                self._text3d.append(t)
+
+        self.scene.disable_render = False
+
