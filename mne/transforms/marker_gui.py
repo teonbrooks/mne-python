@@ -8,7 +8,6 @@ import cPickle as pickle
 import os
 
 from mayavi.core.ui.mayavi_scene import MayaviScene
-from mayavi.mlab import text3d
 from mayavi.modules.glyph import Glyph
 from mayavi.sources.vtk_data_source import VTKDataSource
 from mayavi.tools.mlab_scene_model import MlabSceneModel
@@ -23,7 +22,7 @@ from tvtk.pyface.scene_editor import SceneEditor
 
 from .coreg import fit_matched_pts
 from .transforms import apply_trans, rotation, translation
-from .viewer import HeadViewController
+from .viewer import HeadViewController, PointObject
 from ..fiff.kit.coreg import read_mrk
 
 
@@ -39,66 +38,19 @@ use_editor = CheckListEditor(cols=1, values=[(i, str(i)) for i in xrange(5)])
 class MarkerPoints(HasTraits):
     """Represent 5 marker points"""
     points = Array(float, (5, 3))
-    label = Bool(False)
-    color = Color()
-    rgbcolor = Property(Tuple(Float, Float, Float), depends_on='color')
-    visible = Bool(True)
     save_as = Button()
 
     file = File
     name = Property(Str, depends_on='file')
     dir = Property(Str, depends_on='file')
 
-    scene = Instance(MlabSceneModel, ())
-    glyph = Instance(Glyph)
-    src = Instance(VTKDataSource)
-
-    view = View(VGroup('points', HGroup('color', 'save_as')))
+    view = View(VGroup('file', 'name', 'points', 'save_as'))
 
     def _get_dir(self):
         return os.path.dirname(self.file)
 
     def _get_name(self):
         return os.path.basename(self.file)
-
-    def _get_rgbcolor(self):
-        return tuple(v / 255. for v in self.color.Get())
-
-    @on_trait_change('label')
-    def show_labels(self, show):
-        self.scene.disable_render = True
-        if hasattr(self, '_text3d'):
-            for text in self._text3d:
-                text.remove()
-            del self._text3d
-
-        if show:
-            self._text3d = []
-            fig = self.scene.mayavi_scene
-            for i, pt in enumerate(np.array(self.points)):
-                x, y, z = pt
-                t = text3d(x, y, z, ' %i' % i, scale=.01, color=self.rgbcolor,
-                           figure=fig)
-                self._text3d.append(t)
-
-        self.scene.disable_render = False
-
-    def plot_points(self, scale=1e-2, color=None):
-        from mayavi.tools import pipeline
-        fig = self.scene.mayavi_scene
-        if color is not None:
-            self.color = tuple(int(c * 255) for c in color)
-
-        x, y, z = self.points.T
-        src = pipeline.scalar_scatter(x, y, z)
-        glyph = pipeline.glyph(src, color=self.rgbcolor, figure=fig,
-                               scale_factor=scale, opacity=1.)
-        self.glyph = glyph
-        self.src = src
-
-        self.sync_trait('rgbcolor', self.glyph.actor.property, 'color', mutual=False)
-        self.sync_trait('points', self.src.data, 'points', mutual=False)
-        self.sync_trait('visible', self.glyph, 'visible', mutual=False)
 
     def _save_as_fired(self):
         dlg = FileDialog(action="save as", wildcard=out_wildcard,
@@ -136,7 +88,6 @@ class MarkerPointSource(MarkerPoints):
     use = List(range(5), desc="Which points to use for the interpolated "
                "marker.")
     enabled = Property(Bool, depends_on=['points', 'use'])
-    visible = Property(Bool, depends_on=['enabled'])
     clear = Button(desc="Clear the current marker data")
 
     def _get_enabled(self):
@@ -146,26 +97,24 @@ class MarkerPointSource(MarkerPoints):
             return False
         return True
 
-    def _get_visible(self):
-        return self.enabled
-
     view = View(VGroup(Item('name', style='readonly'),
                        'file',
                        HGroup(
                               Item('use', editor=use_editor, style='custom'),
                               'points',
                               ),
-                       HGroup('label',
-                              Item('color', show_label=False),
-                              Item('clear', show_label=False),
+                       HGroup(Item('clear', show_label=False),
                               Item('save_as', show_label=False)),
-                       show_border=True, label="Source Marker"))
+                       ))
 
     @on_trait_change('file')
     def load(self, fname):
-        pts = read_mrk(fname)
-        self.points = pts
-        self.scene.reset_zoom()
+        if fname:
+            pts = read_mrk(fname)
+            self.points = pts
+            self.scene.reset_zoom()
+        else:
+            self.reset_traits(['points'])
 
     def _clear_fired(self):
         self.reset_traits(['file', 'points'])
@@ -180,14 +129,17 @@ class MarkerPointDest(MarkerPoints):
     name = Property(Str, depends_on='src1.name,src2.name')
     dir = Property(Str, depends_on='src1.dir,src2.dir')
 
+    points = Property(Array(float, (5, 3)),
+                      depends_on=['method', 'src1.points', 'src1.use',
+                                  'src2.points', 'src2.use'])
+    enabled = Property(Bool, depends_on=['points'])
+
     method = Enum('Transform', 'Average', desc="Transform: estimate a rotation"
                   "/translation from mrk1 to mrk2; Average: use the average "
                   "of the mrk1 and mrk2 coordinates for each point.")
 
     view = View(VGroup(Item('method', style='custom'),
-                       HGroup('label', 'color',
-                              Item('save_as', show_label=False)),
-                       show_border=True, label="New Marker"))
+                       Item('save_as', show_label=False)))
 
     def _get_dir(self):
         return self.src1.dir
@@ -195,6 +147,15 @@ class MarkerPointDest(MarkerPoints):
     def _get_name(self):
         n1 = self.src1.name
         n2 = self.src2.name
+
+        if not n1:
+            if n2:
+                return n2
+            else:
+                return ''
+        elif not n2:
+            return n1
+
         if n1 == n2:
             return n1
 
@@ -211,21 +172,24 @@ class MarkerPointDest(MarkerPoints):
 
         return n1[:i]
 
-    @on_trait_change('method, src1.points, src1.use, src2.points, src2.use')
-    def update(self):
-        # if only one source is enabled, use that
+    def _get_enabled(self):
+        return np.any(self.points)
+
+    def _get_points(self):
+        # in case only one or no source is enabled
         if not (self.src1 and self.src1.enabled):
             if (self.src2 and self.src2.enabled):
-                self.points = self.src2.points
-            return
+                return self.src2.points
+            else:
+                return np.zeros((5, 3))
         elif not (self.src2 and self.src2.enabled):
-            self.points = self.src1.points
-            return
+            return self.src1.points
 
+        # Average method
         if self.method == 'Average':
             if len(np.union1d(self.src1.use, self.src2.use)) < 5:
                 error("Need at least one source for each point.")
-                return
+                return np.zeros((5, 3))
 
             pts = (self.src1.points + self.src2.points) / 2
             for i in np.setdiff1d(self.src1.use, self.src2.use):
@@ -233,13 +197,13 @@ class MarkerPointDest(MarkerPoints):
             for i in np.setdiff1d(self.src2.use, self.src1.use):
                 pts[i] = self.src2.points[i]
 
-            self.points = pts
-            return
+            return pts
 
+        # Transform method
         idx = np.intersect1d(self.src1.use, self.src2.use, assume_unique=True)
         if len(idx) < 3:
             error("Need at least three shared points for transformation.")
-            return
+            return np.zeros((5, 3))
 
         src_pts = self.src1.points[idx]
         tgt_pts = self.src2.points[idx]
@@ -257,49 +221,73 @@ class MarkerPointDest(MarkerPoints):
             trans2 = np.dot(translation(*(-tra / 2)), rotation(*(-rot / 2)))
             for i in np.setdiff1d(self.src2.use, self.src1.use):
                 pts[i] = apply_trans(trans2, self.src2.points[i])
-        self.points = pts
+
+        return pts
 
 
 
 class MarkerPanel(HasTraits):
     """Has two marker points sources and interpolates to a third one"""
-    mrk1 = File
-    mrk2 = File
-    markers_1 = Instance(MarkerPointSource)
-    markers_2 = Instance(MarkerPointSource)
-    markers = Instance(MarkerPointDest)
-    scene = Instance(MlabSceneModel, ())
+    mrk1_file = File
+    mrk2_file = File
+    mrk1 = Instance(MarkerPointSource)
+    mrk2 = Instance(MarkerPointSource)
+    mrk3 = Instance(MarkerPointDest)
 
-    def _markers_default(self):
-        mrk = MarkerPointDest(scene=self.scene, src1=self.markers_1,
-                              src2=self.markers_2)
+    # Visualization
+    scene = Instance(MlabSceneModel, ())
+    scale = Float(5e-3)
+    mrk1_obj = Instance(PointObject)
+    mrk2_obj = Instance(PointObject)
+    mrk3_obj = Instance(PointObject)
+
+    def _mrk1_default(self):
+        if os.path.exists(self.mrk1_file):
+            return MarkerPointSource(scene=self.scene, file=self.mrk1_file)
+        else:
+            return MarkerPointSource(scene=self.scene)
+
+    def _mrk2_default(self):
+        if os.path.exists(self.mrk2_file):
+            return MarkerPointSource(scene=self.scene, file=self.mrk2_file)
+        else:
+            return MarkerPointSource(scene=self.scene)
+
+    def _mrk3_default(self):
+        mrk = MarkerPointDest(scene=self.scene, src1=self.mrk1,
+                              src2=self.mrk2)
         return mrk
 
-    def _markers_1_default(self):
-        if os.path.exists(self.mrk1):
-            return MarkerPointSource(scene=self.scene, file=self.mrk1)
-        else:
-            return MarkerPointSource(scene=self.scene)
-
-    def _markers_2_default(self):
-        if os.path.exists(self.mrk2):
-            return MarkerPointSource(scene=self.scene, file=self.mrk2)
-        else:
-            return MarkerPointSource(scene=self.scene)
-
-    view = View(VGroup(Item('markers_1', springy=True, style='custom'),
-                       Item('markers_2', style='custom'),
-                       Item('markers', style='custom'),
-                       show_labels=False,
+    view = View(VGroup(VGroup(Item('mrk1', style='custom'),
+                              Item('mrk1_obj', style='custom'),
+                              show_labels=False,
+                              label="Source Marker 1", show_border=True),
+                       VGroup(Item('mrk2', style='custom'),
+                              Item('mrk2_obj', style='custom'),
+                              show_labels=False,
+                              label="Source Marker 2", show_border=True),
+                       VGroup(Item('mrk3', style='custom'),
+                              Item('mrk3_obj', style='custom'),
+                              show_labels=False,
+                              label="New Marker", show_border=True),
                        ))
 
     @on_trait_change('scene.activated')
     def _init_plot(self):
-        scale = 5e-3
-        self.markers_1.plot_points(color=(.1, .9, 1), scale=scale)
-        self.markers_2.plot_points(color=(1, .5, .1), scale=scale)
-        self.markers.plot_points(color=(0, 0, 0), scale=scale)
-        self.markers.update()
+        self.mrk1_obj = PointObject(scene=self.scene, color=(25, 225, 25),
+                                    point_scale=self.scale)
+        self.mrk1.sync_trait('points', self.mrk1_obj, 'points', mutual=False)
+        self.mrk1.sync_trait('enabled', self.mrk1_obj, 'visible', mutual=False)
+
+        self.mrk2_obj = PointObject(scene=self.scene, color=(255, 125, 25),
+                                    point_scale=self.scale)
+        self.mrk2.sync_trait('points', self.mrk2_obj, 'points', mutual=False)
+        self.mrk2.sync_trait('enabled', self.mrk2_obj, 'visible', mutual=False)
+
+        self.mrk3_obj = PointObject(scene=self.scene, color=(255, 225, 255),
+                                    point_scale=self.scale)
+        self.mrk3.sync_trait('points', self.mrk3_obj, 'points', mutual=False)
+        self.mrk3.sync_trait('enabled', self.mrk3_obj, 'visible', mutual=False)
 
 
 
@@ -319,7 +307,7 @@ class MainWindow(HasTraits):
         return HeadViewController(scene=self.scene, system='ALS')
 
     def _panel_default(self):
-        return MarkerPanel(scene=self.scene, mrk1=self._mrk1, mrk2=self._mrk2)
+        return MarkerPanel(scene=self.scene, mrk1_file=self._mrk1, mrk2_file=self._mrk2)
 
     view = View(HGroup(Item('scene', editor=SceneEditor(scene_class=MayaviScene),
                             dock='vertical'),
@@ -335,3 +323,4 @@ class MainWindow(HasTraits):
     def __init__(self, mrk1='', mrk2=''):
         self._mrk1 = mrk1
         self._mrk2 = mrk2
+        super(MainWindow, self).__init__()
