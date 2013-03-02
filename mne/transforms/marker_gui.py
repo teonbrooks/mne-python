@@ -91,20 +91,16 @@ class MarkerPointSource(MarkerPoints):
     clear = Button(desc="Clear the current marker data")
 
     def _get_enabled(self):
-        if np.all(self.points == 0):
-            return False
-        if not self.use:
-            return False
-        return True
+        return np.any(self.points)
 
     view = View(VGroup(Item('name', style='readonly'),
                        'file',
                        HGroup(
-                              Item('use', editor=use_editor, style='custom'),
+                              Item('use', editor=use_editor, enabled_when="enabled", style='custom'),
                               'points',
                               ),
-                       HGroup(Item('clear', show_label=False),
-                              Item('save_as', show_label=False)),
+                       HGroup(Item('clear', enabled_when="enabled", show_label=False),
+                              Item('save_as', enabled_when="enabled", show_label=False)),
                        ))
 
     @on_trait_change('file')
