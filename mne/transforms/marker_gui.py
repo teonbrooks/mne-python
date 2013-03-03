@@ -64,12 +64,11 @@ class MarkerPoints(HasTraits):
         path = dlg.path
         if not path.endswith(ext):
             path = path + ext
-
-        if os.path.exists(path):
-            answer = confirm(None, "The file %r already exists. Should it be "
-                             "replaced?", "Overwrite File?")
-            if answer != YES:
-                return
+            if os.path.exists(path):
+                answer = confirm(None, "The file %r already exists. Should it be "
+                                 "replaced?", "Overwrite File?")
+                if answer != YES:
+                    return
 
         mrk = np.array(self.points)
         if ext == '.pickled':
@@ -84,7 +83,9 @@ class MarkerPoints(HasTraits):
 
 class MarkerPointSource(MarkerPoints):
     """MarkerPoints subclass for source files"""
-    file = File(filter=['*.sqd'], exists=True)
+    file = File(filter=['Sqd marker file (*.sqd)|*.sqd',
+                        'Text marker file (*.txt)|*.txt',
+                        'Pickled markers (*.pickled)|*.pickled'], exists=True)
     use = List(range(5), desc="Which points to use for the interpolated "
                "marker.")
     enabled = Property(Bool, depends_on=['points', 'use'])
@@ -270,17 +271,17 @@ class MarkerPanel(HasTraits):
 
     @on_trait_change('scene.activated')
     def _init_plot(self):
-        self.mrk1_obj = PointObject(scene=self.scene, color=(25, 225, 25),
+        self.mrk1_obj = PointObject(scene=self.scene, color=(155, 55, 55),
                                     point_scale=self.scale)
         self.mrk1.sync_trait('points', self.mrk1_obj, 'points', mutual=False)
         self.mrk1.sync_trait('enabled', self.mrk1_obj, 'visible', mutual=False)
 
-        self.mrk2_obj = PointObject(scene=self.scene, color=(255, 125, 25),
+        self.mrk2_obj = PointObject(scene=self.scene, color=(55, 155, 55),
                                     point_scale=self.scale)
         self.mrk2.sync_trait('points', self.mrk2_obj, 'points', mutual=False)
         self.mrk2.sync_trait('enabled', self.mrk2_obj, 'visible', mutual=False)
 
-        self.mrk3_obj = PointObject(scene=self.scene, color=(255, 225, 255),
+        self.mrk3_obj = PointObject(scene=self.scene, color=(150, 200, 255),
                                     point_scale=self.scale)
         self.mrk3.sync_trait('points', self.mrk3_obj, 'points', mutual=False)
         self.mrk3.sync_trait('enabled', self.mrk3_obj, 'visible', mutual=False)
