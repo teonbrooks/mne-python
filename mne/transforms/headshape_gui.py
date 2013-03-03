@@ -11,8 +11,8 @@ from mayavi.core.ui.mayavi_scene import MayaviScene
 from mayavi.tools.mlab_scene_model import MlabSceneModel
 import numpy as np
 from pyface.api import confirm, error, FileDialog, OK, YES
-from traits.api import HasTraits, on_trait_change, Instance, Property, \
-                       Array, Bool, Button, Color, File, Float, Int, List, \
+from traits.api import HasTraits, HasPrivateTraits, on_trait_change, cached_property, Instance, Property, \
+                       Array, Bool, Button, Color, Dict, Enum, File, Float, Int, List, \
                        Range, Str, Tuple
 from traitsui.api import View, Item, HGroup, VGroup, CheckListEditor
 from traitsui.menu import NoButtons
@@ -30,15 +30,18 @@ out_ext = ['.pickled', '.txt']
 
 
 
-class HeadShape(HasTraits):
+class HeadShape(HasPrivateTraits):
     file = File(exists=True)
+
+    # settings
+    resolution = Range(value=35, low=5, high=50, label="Resolution [mm]")
+    exclude = List(Int)
+
     hsp_points = Array(float, shape=(None, 3))
     points = Array(float, shape=(None, 3))
     ref_points = Array(float, shape=(None, 3))
-    exclude = List(Int)
-    n_points = Property(Int, depends_on='points')
+    n_points = Property(depends_on='points')
     n_points_all = Int(0)
-    resolution = Range(value=35, low=5, high=50, label="Resolution [mm]")
 
     save_as = Button(label="Save As...")
 
@@ -49,12 +52,13 @@ class HeadShape(HasTraits):
                        Item('save_as', show_label=False),
                        label="Head Shape Source", show_border=True))
 
+    @cached_property
     def _get_n_points(self):
         return len(self.points)
 
     @on_trait_change('file')
     def load(self, fname):
-        pts = read_hsp(fname, None)
+        pts = read_hsp(fname)
         self._cache = {}
         self._exclude = {}
         self.hsp_points = pts
@@ -219,7 +223,7 @@ class MainWindow(HasTraits):
     panel = Instance(ControlPanel)
 
     def _headshape_default(self):
-        hs = HeadShape(scene=self.scene)
+        hs = HeadShape()
         return hs
 
     def _headobj_default(self):
