@@ -381,22 +381,23 @@ class RawKIT(Raw):
 
         trans = fit_matched_pts(tgt_pts=mrk, src_pts=elp[3:])
 
-        self.set_transformed_dig(elp, hsp, trans)
+        self.set_transformed_dig(elp[:3], elp[3:], hsp, trans)
 
-    def set_transformed_dig(self, elp, hsp, trans):
+    def set_transformed_dig(self, fid, elp, hsp, trans):
         """
         Fill in the digitizer data using points that are already transformed to
         neuromag space
 
         Parameters
         ----------
-        mrk : array, shape = (5, 3)
-            Marker points used to estimate the device head transform. If trans
-            is provided, mrk is not used and can be None).
+        fid : array, shape = (3, 3)
+            Digitizer fiducials.
+        elp : array, shape = (5, 3)
+            Digitizer ELP points.
         trans : None | array, shape = (4, 4)
             Device head transformation.
         """
-        self.info['dig'] = get_dig_points(elp, hsp)
+        self.info['dig'] = get_dig_points(fid, elp, hsp)
 
         trans = np.asarray(trans)
         if not trans.shape == (4, 4):
