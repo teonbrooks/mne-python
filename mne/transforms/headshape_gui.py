@@ -43,18 +43,23 @@ class HeadShape(HasPrivateTraits):
     n_points = Property(depends_on='points')
     n_points_all = Int(0)
 
+    can_save = Property(depends_on='points')
     save_as = Button(label="Save As...")
 
     view = View(VGroup('file', 'resolution',
                        Item('exclude', editor=CheckListEditor(), style='text'),
                        '_',
                        Item('n_points', label='N Points', style='readonly'),
-                       Item('save_as', show_label=False),
+                       Item('save_as', enabled_when='can_save', show_label=False),
                        label="Head Shape Source", show_border=True))
 
     @cached_property
     def _get_n_points(self):
         return len(self.points)
+
+    @cached_property
+    def _get_can_save(self):
+        return np.any(self.points)
 
     @on_trait_change('file')
     def load(self, fname):
@@ -148,8 +153,10 @@ class HeadShape(HasPrivateTraits):
 
         if ext == '.pickled':
             pts = np.asarray(self.points)
+            pts_hd = np.asarray(self.ref_points)
+            food = {'hsp': pts, 'hsp_hd': pts_hd}
             with open(path, 'w') as fid:
-                pickle.dump(pts, fid)
+                pickle.dump(food, fid)
         elif ext == '.txt':
             write_hsp(path, self.points)
         else:
