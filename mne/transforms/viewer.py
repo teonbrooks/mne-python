@@ -203,6 +203,7 @@ class PointObject(Object):
             pts = self.points
 
         self.src.data.points = pts
+        self.scene.reset_zoom()
 
 
 
