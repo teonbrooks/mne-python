@@ -81,12 +81,12 @@ def get_dig_points(fid_points, elp_points, hsp_points):
     return dig
 
 
-def read_mrk(mrk_fname):
+def read_mrk(fname):
     """Marker Point Extraction in MEG space directly from sqd
 
     Parameters
     ----------
-    mrk_fname : str
+    fname : str
         Absolute path to Marker file.
         File formats allowed: *.sqd, *.txt, *.pickled
 
@@ -95,9 +95,9 @@ def read_mrk(mrk_fname):
     mrk_points : numpy.array, shape = (n_points, 3)
         Marker points in MEG space [m].
     """
-    ext = path.splitext(mrk_fname)[-1]
+    ext = path.splitext(fname)[-1]
     if ext == '.sqd':
-        with open(mrk_fname, 'r') as fid:
+        with open(fname, 'r') as fid:
             fid.seek(KIT.MRK_INFO)
             mrk_offset = unpack('i', fid.read(KIT.INT))[0]
             fid.seek(mrk_offset)
@@ -110,14 +110,26 @@ def read_mrk(mrk_fname):
                 fid.seek(KIT.INT * 4 + (KIT.DOUBLE * 3), SEEK_CUR)
                 pts.append(np.fromfile(fid, dtype='d', count=3))
                 mrk_points = np.array(pts)
-    elif ext == '.hpi':
-        mrk_points = np.loadtxt(mrk_fname)
+    elif ext == '.txt':
+        mrk_points = np.loadtxt(fname)
     elif ext == '.pickled':
-        mrk = pickle.load(open(mrk_fname))
-        mrk_points = mrk['points']
+        with open(fname) as fid:
+            food = pickle.load(fid)
+        try:
+            mrk_points = food['mrk']
+        except:
+            err = ("%r does not contain marker points." % fname)
+            raise ValueError(err)
     else:
-        err = ('KIT marker file must be *.sqd, *.hpi or *.pickled, '
+        err = ('KIT marker file must be *.sqd, *.txt or *.pickled, '
                'not *%s.' % ext)
+        raise ValueError(err)
+
+    # check output
+    mrk_points = np.asarray(mrk_points)
+    if mrk_points.shape != (5, 3):
+        err = ("%r is no marker file, shape is "
+               "%s" % (fname, mrk_points.shape))
         raise ValueError(err)
     return mrk_points
 
