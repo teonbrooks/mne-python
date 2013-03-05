@@ -19,13 +19,15 @@ from .constants import KIT
 
 
 
-def get_dig_points(elp_points, hsp_points):
+def get_dig_points(fid_points, elp_points, hsp_points):
     """Create a dig point list for the info dictionary
 
     Parameters
     ----------
-    elp_points : array, shape = (8, 3)
-        Array with elp points (in the target coordinate system).
+    fid_points : array, shape = (3, 3)
+        Polhemus fiducial (in the target coordinate system).
+    elp_points : array, shape = (5, 3)
+        Polhemus elp points (in the target coordinate system).
     hsp_points : array, shape = (n_points, 3)
         Array with headshape points (in the target coordinate system).
 
@@ -35,10 +37,9 @@ def get_dig_points(elp_points, hsp_points):
         A list containing the mrk_points, elp_points, and hsp_points in
         the format used for raw.info['dig'].
     """
-    nasion, lpa, rpa = elp_points[:3]
-    elp_points = elp_points[3:]
-
     dig = []
+
+    nasion, lpa, rpa = fid_points
 
     point_dict = {}
     point_dict['coord_frame'] = FIFF.FIFFV_COORD_HEAD
