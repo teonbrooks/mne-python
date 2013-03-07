@@ -382,7 +382,8 @@ class RawKIT(Raw):
         elp = np.dot(elp, nmtrans)
         hsp = np.dot(hsp, nmtrans)
 
-        trans = fit_matched_pts(tgt_pts=mrk, src_pts=elp[3:])
+        # device head transform
+        trans = fit_matched_pts(tgt_pts=elp[3:], src_pts=mrk, out='trans')
 
         self.set_transformed_dig(elp[:3], elp[3:], hsp, trans)
 

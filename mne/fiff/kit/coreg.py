@@ -179,7 +179,7 @@ def read_hsp(hsp_fname):
         # downsample the digitizer points
     elif ext == '.pickled':
         hsp = pickle.load(open(hsp_fname))
-        hsp_points = hsp['points']
+        hsp_points = hsp['hsp']
     else:
         err = ('Polhemus hsp file must be *.txt or *.pickled, not *%s.' % ext)
         raise ValueError(err)
