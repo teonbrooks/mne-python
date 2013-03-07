@@ -29,6 +29,8 @@ from ..fiff.kit.kit import RawKIT
 
 
 use_editor = CheckListEditor(cols=5, values=[(i, str(i)) for i in xrange(5)])
+hsp_wildcard = ['Pickled Head Shape (*.pickled)|*.pickled',
+                'Plain Text File (*.txt)|*.txt']
 
 
 class Kit2FiffPanel(HasPrivateTraits):
@@ -36,8 +38,8 @@ class Kit2FiffPanel(HasPrivateTraits):
     # Source Files
     sqd_file = File(exists=True, filter=['*.sqd'])
     sns_file = File(exists=True, filter=['*.txt'])
-    hsp_file = File(exists=True, filter=['*.pickled', '*.txt'],
-                    desc="Digitizer head shape")
+    hsp_file = File(exists=True, filter=hsp_wildcard, desc="Digitizer head "
+                    "shape")
     fid_file = File(exists=True, filter=['*.txt'], desc="Digitizer fiducials")
 
     # Raw
@@ -100,8 +102,15 @@ class Kit2FiffPanel(HasPrivateTraits):
 
     @cached_property
     def _get_hsp_raw(self):
-        if os.path.exists(self.hsp_file):
-            return read_hsp(self.hsp_file)
+        fname = self.hsp_file
+        if os.path.exists(fname):
+            _, ext = os.path.splitext(fname)
+            if ext == '.pickled':
+                with open(fname) as fid:
+                    food = pickle.load(fid)
+                return food['hsp']
+            else:
+                return read_hsp(fname)
 
     @cached_property
     def _get_neuromag_trans(self):
@@ -157,7 +166,7 @@ class Kit2FiffPanel(HasPrivateTraits):
             src_pts = src_pts[self.use_mrk]
             dst_pts = dst_pts[self.use_mrk]
 
-        trans = fit_matched_pts(src_pts, dst_pts, params=False)
+        trans = fit_matched_pts(src_pts, dst_pts, out='trans')
         return trans
 
     @cached_property
