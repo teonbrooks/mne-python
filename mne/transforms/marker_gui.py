@@ -23,7 +23,7 @@ from tvtk.pyface.scene_editor import SceneEditor
 
 from .coreg import fit_matched_pts
 from .transforms import apply_trans, rotation, translation
-from .viewer import HeadViewController, PointObject
+from .viewer import HeadViewController, headview_borders, PointObject
 from ..fiff.kit.coreg import read_mrk
 
 
@@ -90,8 +90,8 @@ class MarkerPointSource(MarkerPoints):
     enabled = Property(Bool, depends_on=['points', 'use'])
     clear = Button(desc="Clear the current marker data")
 
-    view = View(VGroup(Item('name', style='readonly'),
-                       'file',
+    view = View(VGroup('file',
+                       Item('name', show_label=False, style='readonly'),
                        HGroup(
                               Item('use', editor=use_editor, enabled_when="enabled", style='custom'),
                               'points',
@@ -225,18 +225,20 @@ class MarkerPointDest(MarkerPoints):
 
         src_pts = self.src1.points[idx]
         tgt_pts = self.src2.points[idx]
-        _, rot, tra = fit_matched_pts(src_pts, tgt_pts, params=True)
+        est = fit_matched_pts(src_pts, tgt_pts)
+        rot = np.array(est[:3]) / 2
+        tra = np.array(est[3:]) / 2
 
         if len(self.src1.use) == 5:
-            trans = np.dot(translation(*(tra / 2)), rotation(*(rot / 2)))
+            trans = np.dot(translation(*tra), rotation(*rot))
             pts = apply_trans(trans, self.src1.points)
         elif len(self.src2.use) == 5:
-            trans = np.dot(translation(*(-tra / 2)), rotation(*(-rot / 2)))
+            trans = np.dot(translation(* -tra), rotation(* -rot))
             pts = apply_trans(trans, self.src2.points)
         else:
-            trans1 = np.dot(translation(*(tra / 2)), rotation(*(rot / 2)))
+            trans1 = np.dot(translation(*tra), rotation(*rot))
             pts = apply_trans(trans1, self.src1.points)
-            trans2 = np.dot(translation(*(-tra / 2)), rotation(*(-rot / 2)))
+            trans2 = np.dot(translation(* -tra), rotation(* -rot))
             for i in np.setdiff1d(self.src2.use, self.src1.use):
                 pts[i] = apply_trans(trans2, self.src2.points[i])
 
@@ -317,10 +319,10 @@ class MainWindow(HasTraits):
         Path to pre- and post measurement marker files (*.sqd) or empty string.
     """
     scene = Instance(MlabSceneModel, ())
-    head_view = Instance(HeadViewController)
+    headview = Instance(HeadViewController)
     panel = Instance(MarkerPanel)
 
-    def _head_view_default(self):
+    def _headview_default(self):
         return HeadViewController(scene=self.scene, system='ALS')
 
     def _panel_default(self):
@@ -328,7 +330,7 @@ class MainWindow(HasTraits):
 
     view = View(HGroup(Item('scene', editor=SceneEditor(scene_class=MayaviScene),
                             dock='vertical'),
-                       VGroup(Item('head_view', style='custom'),
+                       VGroup(headview_borders,
                               Item('panel', style="custom"),
                               show_labels=False),
                        show_labels=False,
