@@ -19,7 +19,7 @@ from traitsui.menu import NoButtons
 from tvtk.pyface.scene_editor import SceneEditor
 
 from .coreg import decimate_headshape
-from .viewer import HeadViewController, PointObject
+from .viewer import HeadViewController, headview_borders, PointObject
 from ..fiff.kit.coreg import read_hsp, write_hsp
 
 
@@ -166,7 +166,6 @@ class HeadShape(HasPrivateTraits):
 
 class ControlPanel(HasTraits):
     scene = Instance(MlabSceneModel, ())
-    headview = Instance(HeadViewController)
     headshape = Instance(HeadShape)
     headobj = Instance(PointObject)
     headobj_ref = Instance(PointObject)
@@ -179,7 +178,6 @@ class ControlPanel(HasTraits):
                                    style='custom'),
                               label='Reference Head Shape',
                               show_border=True),
-                       Item('headview', style='custom'),
                        show_labels=False,
                        ))
 
@@ -191,11 +189,6 @@ class ControlPanel(HasTraits):
         fig = self.scene.mayavi_scene
         self.picker = fig.on_mouse_pick(self.picker_callback)
         self.picker.tolerance = 0.001
-
-    @on_trait_change('headshape.file')
-    def _on_file_changes(self):
-        if self.headview:
-            self.headview.left = True
 
     def picker_callback(self, picker):
         mygl = self.headobj.glyph
@@ -250,15 +243,24 @@ class MainWindow(HasTraits):
         return hv
 
     def _panel_default(self):
-        return ControlPanel(scene=self.scene, headview=self.headview,
-                            headshape=self.headshape, headobj=self.headobj,
-                            headobj_ref=self.headobj_ref)
+        return ControlPanel(scene=self.scene, headshape=self.headshape,
+                            headobj=self.headobj, headobj_ref=self.headobj_ref)
 
     view = View(HGroup(Item('scene',
                             editor=SceneEditor(scene_class=MayaviScene)),
-                       Item('panel', style="custom"),
+                       VGroup(headview_borders,
+                              Item('panel', style="custom"),
+                              show_labels=False),
                        show_labels=False,
                       ),
                 resizable=True,
                 height=0.75, width=0.75,
                 buttons=NoButtons)
+
+    @on_trait_change('scene.activated')
+    def _on_scene_activated(self):
+        self.headshape.on_trait_change(self._on_file_changes, 'file')
+
+    def _on_file_changes(self):
+        self.headview.left = True
+
