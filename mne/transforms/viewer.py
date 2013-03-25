@@ -20,6 +20,7 @@ from traitsui.api import View, Item, Group, HGroup, VGroup
 from .transforms import apply_trans
 
 
+headview_item = Item('headview', style='custom', show_label=False)
 headview_borders = VGroup(Item('headview', style='custom', show_label=False),
                           show_border=True, label='View')
 
@@ -54,7 +55,9 @@ class HeadViewController(HasTraits):
     @on_trait_change('scene.activated')
     def _init_view(self):
         self.scene.parallel_projection = True
-        self.sync_trait('scale', self.scene.camera, 'parallel_scale')
+
+        # this command raises an error:
+#         self.sync_trait('scale', self.scene.camera, 'parallel_scale')
         # this alone seems not to be enough to sync the camera scale (see
         # ._on_view_scale_update() method below
 
