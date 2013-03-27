@@ -552,7 +552,7 @@ class CoregFrame(HasTraits):
                               VGroup(Item('hsp_src', style="custom"),
                                      Item('s_sel', style="custom"),
                                      label='Data Source', show_labels=False,
-                                     show_border=True, enabled_when='lock_fiducials'),
+                                     show_border=True),
                               VGroup(Item('lock_fiducials', style='custom',
                                           editor=EnumEditor(values={False: '2:Edit',
                                                                     True: '1:Lock'},
@@ -566,7 +566,8 @@ class CoregFrame(HasTraits):
                               show_labels=False),
                        show_labels=False,
                       ),
-                resizable=True, height=0.75, width=0.75,
+                resizable=True,  # height=0.75,
+                width=1100,  # 0.75,
                 buttons=[UndoButton])  # HelpButton
 
     def _fid_panel_default(self):
@@ -611,6 +612,10 @@ class CoregFrame(HasTraits):
         if subject is not None:
             if subject in self.s_sel.subjects:
                 self.s_sel.subject = subject
+
+        # sync path components to fiducials panel
+        self.s_sel.sync_trait('subject', self.fid_panel, mutual=False)
+        self.s_sel.sync_trait('subjects_dir', self.fid_panel, mutual=False)
 
         # lock fiducials if file is found
         if self.fid_panel.fid_file:
@@ -697,7 +702,9 @@ class CoregFrame(HasTraits):
 
     @on_trait_change('mri_src.tri')
     def _on_mri_src_change(self):
-        if (not np.any(self.mri_src.pts)) or (not np.any(self.mri_src.tri)):
+        if not self.mri_obj:
+            return
+        elif (not np.any(self.mri_src.pts)) or (not np.any(self.mri_src.tri)):
             self.mri_obj.clear()
             return
 
