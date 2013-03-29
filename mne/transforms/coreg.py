@@ -6,7 +6,7 @@
 
 from copy import deepcopy
 import fnmatch
-from glob import iglob
+from glob import glob
 import os
 import cPickle as pickle
 import re
@@ -499,6 +499,71 @@ def is_mri_subject(subject, subjects_dir):
             return False
 
     return True
+
+
+def read_mri_scale(subject, subjects_dir=None):
+    """Read the scale factor for a scaled MRI brain
+
+    Parameters
+    ----------
+    subject : str
+        Name of the scaled MRI subject.
+    subjects_dir : None | str
+        Override the SUBJECTS_DIR environment variable.
+    """
+    subjects_dir = get_subjects_dir(subjects_dir, raise_error=True)
+    fname = os.path.join(subjects_dir, subject, 'MRI scaling parameters.txt')
+
+    with open(fname) as fid:
+        for line in fid:
+            if ':' in line:
+                param, value = line.split(':', 1)
+                if param.strip() == 'scale':
+                    # TODO: 3 factors
+                    return float(value)
+    raise IOError('Scaling parameter not found')
+
+
+def scale_labels(s_to, s_from='fsaverage', fname='aparc/*.label',
+                 subjects_dir=None):
+    """Scale labels to match a brain that was created by scaling fsaverage
+
+    Parameters
+    ----------
+    s_to : str
+        Name of the scaled MRI subject (the destination brain).
+    s_from : str
+        Name of the original MRI subject (the brain that was scaled to create
+        s_to, usually "fsaverage").
+    fname : str
+        Name of the label relative to the label directory in the MRI subject
+        directory (is expanded using glob, so it can contain "*"). For example,
+        "lh.BA3a.label" will scale "fsaverage/label/lh.BA3a.label".
+    subjects_dir : None | str
+        Override the SUBJECTS_DIR environment variable.
+    """
+    subjects_dir = get_subjects_dir(subjects_dir, raise_error=True)
+    scale = read_mri_scale(s_to, subjects_dir)
+
+    src_dir = os.path.join(subjects_dir, s_from, 'label')
+    dst_dir = os.path.join(subjects_dir, s_to, 'label')
+
+    os.chdir(src_dir)
+    fnames = glob(fname)
+
+    for fname in fnames:
+        src = os.path.join(src_dir, fname)
+        dst = os.path.join(dst_dir, fname)
+
+        dirname = os.path.dirname(dst)
+        if not os.path.exists(dirname):
+            os.makedirs(dirname)
+
+        l_old = read_label(src)
+        pos = l_old.pos * scale
+        l_new = Label(l_old.vertices, pos, l_old.values, l_old.hemi,
+                      l_old.comment)
+        l_new.save(dst)
 
 
 def scale_mri(s_from, s_to, scale, overwrite=False, subjects_dir=None):
