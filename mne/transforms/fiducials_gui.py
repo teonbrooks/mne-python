@@ -42,6 +42,9 @@ class FiducialsPanel(HasPrivateTraits):
     fid_name = Property(depends_on='fid_file')
     fid_pts = Property(depends_on=['fid_file'])
 
+    subjects_dir = Str()
+    subject = Str()
+
     locked = Bool(False)
     set = Enum('LAP', 'Nasion', 'RAP')
     LAP = Array(float, (1, 3))
@@ -53,7 +56,8 @@ class FiducialsPanel(HasPrivateTraits):
     can_save = Property(depends_on=['fid_file', 'can_save_as'])
     save = Button(label='Save')
     reset_fid = Button(label="Reset to File")
-    can_reset = Property(depends_on=['fid_file', 'fid_pts'])
+    can_reset = Property(depends_on=['fid_file', 'fid_pts', 'LAP', 'nasion',
+                                     'RAP'])
 
     scene = Instance(MlabSceneModel)
     headview = Instance(HeadViewController)
@@ -106,7 +110,7 @@ class FiducialsPanel(HasPrivateTraits):
             return False
         elif np.any(self.LAP != self.fid_pts[0:1]):
             return True
-        elif np.any(self.naison != self.fid_pts[1:2]):
+        elif np.any(self.nasion != self.fid_pts[1:2]):
             return True
         elif np.any(self.RAP != self.fid_pts[2:3]):
             return True
@@ -121,7 +125,14 @@ class FiducialsPanel(HasPrivateTraits):
 
     @cached_property
     def _get_can_save(self):
-        return (self.can_save_as and self.fid_file)
+        if not self.can_save_as:
+            return False
+        elif self.fid_file:
+            return True
+        elif self.subjects_dir and self.subject:
+            return True
+        else:
+            return False
 
     def get_dig_list(self):
         dig = [{'kind': 1, 'ident': 1, 'r': np.array(self.LAP[0])},
@@ -130,7 +141,16 @@ class FiducialsPanel(HasPrivateTraits):
         return dig
 
     def _save_fired(self):
-        write_fiducials(self.fid_file, self.get_dig_list(), FIFF.FIFFV_COORD_MRI)
+        if self.fid_file:
+            fname = self.fid_file
+        elif self.subjects_dir and self.subject:
+            fname = fid_fname.format(subjects_dir=self.subjects_dir,
+                                     subject=self.subject, name=self.subject)
+        else:
+            self._save_as_fired()
+            return
+        write_fiducials(fname, self.get_dig_list(), FIFF.FIFFV_COORD_MRI)
+        self.fid_file = fname
 
     def _save_as_fired(self):
         if self.fid_file:
@@ -205,7 +225,7 @@ class MainWindow(HasTraits):
     mri_obj = Instance(SurfaceObject)
     s_sel = Instance(SubjectSelector, ())
     scene = Instance(MlabSceneModel, ())
-    panel = Instance(FiducialsPanel)
+    fid_panel = Instance(FiducialsPanel)
 
     point_scale = float(5e-3)
     lap_obj = Instance(PointObject)
@@ -215,7 +235,7 @@ class MainWindow(HasTraits):
     def _headview_default(self):
         return HeadViewController(scene=self.scene, system='RAS')
 
-    def _panel_default(self):
+    def _fid_panel_default(self):
         pnl = FiducialsPanel(headview=self.headview, scene=self.scene)
         pnl.trait_view('view', view2)
         return pnl
@@ -226,7 +246,7 @@ class MainWindow(HasTraits):
                               VGroup(Item('s_sel', style='custom'),
                                      label="Subject", show_border=True,
                                      show_labels=False),
-                              VGroup(Item('panel', style="custom"),
+                              VGroup(Item('fid_panel', style="custom"),
                                      label="Fiducials", show_border=True,
                                      show_labels=False),
                               show_labels=False),
@@ -253,27 +273,27 @@ class MainWindow(HasTraits):
         # fiducials
         self.lap_obj = PointObject(scene=self.scene, color=(255, 0, 0),
                                    point_scale=self.point_scale)
-        self.panel.sync_trait('LAP', self.lap_obj, 'points', mutual=False)
+        self.fid_panel.sync_trait('LAP', self.lap_obj, 'points', mutual=False)
 
         self.nas_obj = PointObject(scene=self.scene, color=(0, 255, 0),
                                    point_scale=self.point_scale)
-        self.panel.sync_trait('nasion', self.nas_obj, 'points', mutual=False)
+        self.fid_panel.sync_trait('nasion', self.nas_obj, 'points', mutual=False)
 
         self.rap_obj = PointObject(scene=self.scene, color=(0, 0, 255),
                                    point_scale=self.point_scale)
-        self.panel.sync_trait('RAP', self.rap_obj, 'points', mutual=False)
+        self.fid_panel.sync_trait('RAP', self.rap_obj, 'points', mutual=False)
 
         # bem
         self.mri_obj = SurfaceObject(points=self.mri_src.pts, tri=self.mri_src.tri,
                                      scene=self.scene, color=(255, 255, 255))
         self.mri_src.on_trait_change(self._on_mri_src_change, 'tri')
-        self.panel.hsp_obj = self.mri_obj
+        self.fid_panel.hsp_obj = self.mri_obj
 
         self.scene.disable_render = False
         self.headview.front = True
 
         # picker
-        self.scene.mayavi_scene.on_mouse_pick(self.panel._on_mouse_click)
+        self.scene.mayavi_scene.on_mouse_pick(self.fid_panel._on_mouse_click)
 
     def _on_mri_src_change(self):
         if (not np.any(self.mri_src.pts)) or (not np.any(self.mri_src.tri)):
@@ -300,11 +320,11 @@ class MainWindow(HasTraits):
         path = fid_fname.format(subjects_dir=subjects_dir, subject=subject,
                                 name=subject)
         if os.path.exists(path):
-            self.panel.fid_file = path
+            self.fid_panel.fid_file = path
         else:
             path = fid_fname.format(subjects_dir=subjects_dir, subject=subject,
                                     name='*')
             fnames = glob(path)
             if fnames:
                 path = fnames[0]
-                self.panel.fid_file = path
+                self.fid_panel.fid_file = path
