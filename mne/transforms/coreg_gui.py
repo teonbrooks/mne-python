@@ -513,6 +513,34 @@ class NewMriDialog(HasPrivateTraits):
 #            self.overwrite_status = 'None'
 
 
+# view for high resolution (all controls on the right)
+view_hrs = View(HGroup(Item('scene', editor=SceneEditor(scene_class=MayaviScene),
+                            dock='vertical'),
+                       VGroup(VGroup(headview_item,
+                                     Item('mri_obj', label='MRI', style='custom'),
+                                     label='View', show_labels=False,
+                                     show_border=True),
+                              VGroup(Item('hsp_src', style="custom"),
+                                     Item('s_sel', style="custom"),
+                                     label='Data Source', show_labels=False,
+                                     show_border=True),
+                              VGroup(Item('lock_fiducials', style='custom',
+                                          editor=EnumEditor(values={False: '2:Edit',
+                                                                    True: '1:Lock'},
+                                                            cols=2)),
+                                     Item('fid_panel', style='custom'),
+                                     label='MRI Fiducials', show_labels=False,
+                                     show_border=True),
+                              VGroup(Item('coreg', style='custom'),
+                                     label='Coregistration', show_labels=False,
+                                     show_border=True, enabled_when='lock_fiducials'),
+                              show_labels=False),
+                       show_labels=False,
+                      ),
+                resizable=True,  # height=0.75,
+                width=1100,  # 0.75,
+                buttons=[UndoButton])  # HelpButton
+
 
 class CoregFrame(HasTraits):
     """GUI for interpolating between two KIT marker files
@@ -543,20 +571,24 @@ class CoregFrame(HasTraits):
     nas_obj = Instance(PointObject)
     rap_obj = Instance(PointObject)
 
-    view = View(HGroup(Item('scene', editor=SceneEditor(scene_class=MayaviScene),
-                            dock='vertical'),
-                       VGroup(VGroup(headview_item,
+    view = View(HGroup(VGroup(Item('scene', editor=SceneEditor(scene_class=MayaviScene),
+                                   dock='vertical', show_label=False),
+                              VGroup(headview_item,
                                      Item('mri_obj', label='MRI', style='custom'),
-                                     label='View', show_labels=False,
-                                     show_border=True),
+#                                      label='View',
+                                     show_labels=False,
+#                                      show_border=True
+                                     ),
+                              ),
+                       VGroup(
                               VGroup(Item('hsp_src', style="custom"),
                                      Item('s_sel', style="custom"),
                                      label='Data Source', show_labels=False,
                                      show_border=True),
-                              VGroup(Item('lock_fiducials', style='custom',
-                                          editor=EnumEditor(values={False: '2:Edit',
-                                                                    True: '1:Lock'},
-                                                            cols=2)),
+                              VGroup(HGroup(Item('lock_fiducials', style='custom',
+                                                 editor=EnumEditor(values={False: '2:Edit',
+                                                                           True: '1:Lock'},
+                                                            cols=2), show_label=False)),
                                      Item('fid_panel', style='custom'),
                                      label='MRI Fiducials', show_labels=False,
                                      show_border=True),
@@ -566,9 +598,7 @@ class CoregFrame(HasTraits):
                               show_labels=False),
                        show_labels=False,
                       ),
-                resizable=True,  # height=0.75,
-                width=1100,  # 0.75,
-                buttons=[UndoButton])  # HelpButton
+                resizable=True, buttons=[UndoButton])  # HelpButton
 
     def _fid_panel_default(self):
         return FiducialsPanel(scene=self.scene, headview=self.headview)
