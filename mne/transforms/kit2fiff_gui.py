@@ -23,10 +23,10 @@ from tvtk.pyface.scene_editor import SceneEditor
 from .marker_gui import MarkerPanel
 from .coreg import fit_matched_pts
 from .transforms import apply_trans, coord_trans
-from .viewer import HeadViewController, headview_borders, PointObject
+from .viewer import HeadViewController, headview_borders, headview_item, PointObject
 from ..fiff.kit.coreg import read_hsp, read_elp, transform_ALS_to_RAS, \
                              get_neuromag_transform
-from ..fiff.kit.kit import RawKIT
+from ..fiff.kit.kit import RawKIT, KIT
 
 
 
@@ -85,6 +85,7 @@ class Kit2FiffPanel(HasPrivateTraits):
     can_save = Property(Bool, depends_on=['raw', 'fid_src', 'elp_src',
                                           'hsp_src', 'dev_head_trans'])
     save_as = Button(label='Save FIFF...')
+    save_feedback = Str('')
 
     view = View(VGroup(VGroup(Item('sns_file', label='SNS File'),
                               Item('sqd_file', label="Data"),
@@ -98,7 +99,8 @@ class Kit2FiffPanel(HasPrivateTraits):
 #                       VGroup(Item('endian', style='custom'),
 #                              Item('event_info', style='readonly', show_label=False),
 #                              label='Events', show_border=True),
-                       Item('save_as', enabled_when='can_save', show_label=False)))
+                       Item('save_as', enabled_when='can_save', show_label=False),
+                       Item('save_feedback', show_label=False, style='readonly')))
 
     @cached_property
     def _get_sqd_fname(self):
@@ -127,21 +129,45 @@ class Kit2FiffPanel(HasPrivateTraits):
 
     @cached_property
     def _get_elp_raw(self):
-        if os.path.exists(self.fid_file):
+        if not self.fid_file:
+            return
+
+        try:
             pts = read_elp(self.fid_file)
+        except Exception as err:
+            error(None, str(err), "Error Reading Fiducials")
+            self.reset_traits(['fid_file'])
+            raise
+        else:
             return pts
 
     @cached_property
     def _get_hsp_raw(self):
         fname = self.hsp_file
-        if os.path.exists(fname):
+        if not fname:
+            return
+
+        try:
             _, ext = os.path.splitext(fname)
             if ext == '.pickled':
                 with open(fname) as fid:
                     food = pickle.load(fid)
-                return food['hsp']
+                pts = food['hsp']
             else:
-                return read_hsp(fname)
+                pts = read_hsp(fname)
+
+            if len(pts) > KIT.DIG_POINTS:
+                err = ("Too many points in head shape file (%i). Use the "
+                       "headshape GUI to create a head shape with fewer than "
+                       "%i points." % (len(pts), KIT.DIG_POINTS))
+                raise ValueError(err)
+
+        except Exception as err:
+            error(None, str(err), "Error Reading Head Shape")
+            self.reset_traits(['hsp_file'])
+            raise
+        else:
+            return pts
 
     @cached_property
     def _get_neuromag_trans(self):
@@ -254,6 +280,7 @@ class Kit2FiffPanel(HasPrivateTraits):
                          default_path=default_path)
         dlg.open()
         if dlg.return_code != OK:
+            self.save_feedback = "Saving aborted."
             return
 
         fname = dlg.path
@@ -263,6 +290,7 @@ class Kit2FiffPanel(HasPrivateTraits):
                 answer = confirm(None, "The file %r already exists. Should it be "
                                  "replaced?", "Overwrite File?")
                 if answer != YES:
+                    self.save_feedback = "Saving aborted."
                     return
 
         raw = self.raw
@@ -274,15 +302,18 @@ class Kit2FiffPanel(HasPrivateTraits):
         prog.open()
         prog.update(0)
 
+        self.save_feedback = "Saving ..."
         try:
             raw.save(fname, overwrite=True)
         except Exception as err:
             prog.close()
             msg = str(err)
+            self.save_feedback = "Saving failed."
             error(None, msg, "Error Saving Fiff")
             raise
         else:
             prog.close()
+            self.save_feedback = "Saved: %r" % os.path.basename(fname)
 
     @on_trait_change('scene.activated')
     def _init_plot(self):
@@ -335,6 +366,18 @@ class ControlPanel(HasTraits):
 
 
 
+view_hrs = View(HGroup(Item('scene',
+                            editor=SceneEditor(scene_class=MayaviScene)),
+                       VGroup(headview_borders,
+                              Item('panel', style='custom'),
+                              show_labels=False),
+                       show_labels=False,
+                      ),
+                resizable=True,
+                buttons=NoButtons)
+
+
+
 class MainWindow(HasTraits):
     """GUI for interpolating between two KIT marker files"""
     scene = Instance(MlabSceneModel, ())
@@ -349,13 +392,14 @@ class MainWindow(HasTraits):
         p = ControlPanel(scene=self.scene)
         return p
 
-    view = View(HGroup(Item('scene',
-                            editor=SceneEditor(scene_class=MayaviScene)),
-                       VGroup(headview_borders,
-                              Item('panel', style='custom'),
+    view = View(HGroup(VGroup(Item('scene', editor=SceneEditor(scene_class=MayaviScene),
+                                   dock='vertical', show_label=False),
+                              VGroup(headview_item,
+                                     show_labels=False,
+                                     ),
+                              ),
+                       VGroup(Item('panel', style='custom'),
                               show_labels=False),
                        show_labels=False,
                       ),
-                resizable=True,
-                height=0.75, width=0.75,
-                buttons=NoButtons)
+                width=1100, resizable=True, buttons=NoButtons)
