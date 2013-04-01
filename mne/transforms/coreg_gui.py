@@ -698,6 +698,9 @@ class CoregFrame(HasTraits):
         self.headview.left = True
         self.scene.disable_render = False
 
+        # adapt picker sensitivity when zooming
+        self.scene.camera.on_trait_change(self._on_view_scale_change, 'parallel_scale')
+
     @on_trait_change('lock_fiducials')
     def _on_lock_fiducials(self):
         if (not self.hsp_obj) or (not self.hsp_fid_obj):
@@ -713,6 +716,10 @@ class CoregFrame(HasTraits):
         else:
             self.hsp_obj.visible = False
             self.hsp_fid_obj.visible = False
+
+#     @on_trait_change('scene.camera.parallel_scale', post_init=True)
+    def _on_view_scale_change(self, scale):
+        self.picker.tolerance = .0025 / scale
 
     def _on_bem_file_change(self):
         bem_file = self.s_sel.bem_file
