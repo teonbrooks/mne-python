@@ -56,16 +56,11 @@ class HeadViewController(HasTraits):
     def _init_view(self):
         self.scene.parallel_projection = True
 
-        # this command raises an error:
-#         self.sync_trait('scale', self.scene.camera, 'parallel_scale')
-        # this alone seems not to be enough to sync the camera scale (see
-        # ._on_view_scale_update() method below
-
-    @on_trait_change('scale')
-    def _on_view_scale_update(self):
-        if self.scene is not None:
-            self.scene.camera.parallel_scale = self.scale
-            self.scene.render()
+        # apparently scene,activated happens several times
+        if self.scene.renderer:
+            self.sync_trait('scale', self.scene.camera, 'parallel_scale')
+            # and apparently this does not happen by default:
+            self.on_trait_change(self.scene.render, 'scale')
 
     @on_trait_change('top,left,right,front')
     def on_set_view(self, view, _):
