@@ -239,6 +239,7 @@ class SurfaceObject(Object):
             self.src.remove()
         if hasattr(self.surf, 'remove'):
             self.surf.remove()
+        self.reset_traits(['src', 'surf'])
 
     @on_trait_change('scene.activated')
     def plot(self):
