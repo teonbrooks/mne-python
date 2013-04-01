@@ -13,7 +13,7 @@ import re
 import shutil
 
 import logging
-from mne.utils import get_config, run_subprocess
+from mne.utils import get_config
 logger = logging.getLogger('mne')
 
 import numpy as np
@@ -26,12 +26,12 @@ from scipy.spatial.distance import cdist
 from ..fiff import Raw, FIFF
 from ..fiff.meas_info import read_fiducials, write_fiducials
 from ..label import read_label, Label
-from ..source_space import read_source_spaces, write_source_spaces, \
-                           setup_mri, watershed_bem
+from ..source_space import read_source_spaces, write_source_spaces
 from ..surface import read_surface, write_surface, read_bem_surfaces, \
                       write_bem_surface
 from ..utils import get_subjects_dir
-from .transforms import apply_trans, rotation, rotation3d, scaling, translation, write_trans
+from .transforms import apply_trans, rotation, rotation3d, scaling, \
+                        translation, write_trans
 
 
 
@@ -112,10 +112,12 @@ def create_default_subject(mne_root=None, fs_home=None, subjects_dir=None):
             raise IOError(err)
 
     # copy fsaverage from freesurfer
+    logger.info("Copying fsaverage subject from freesurfer directory...")
     shutil.copytree(fs_src, dest)
 
     # add files from mne
     dest_bem = os.path.join(dest, 'bem')
+    logger.info("Copying auxiliary fsaverage files from mne directory...")
     for name in mne_files:
         shutil.copy(mne_fname % name, dest_bem)
 
