@@ -42,7 +42,7 @@ def create_default_subject(mne_root=None, fs_home=None, subjects_dir=None):
     """Create a default subject in subjects_dir
 
     Create a copy of fsaverage from the freesurfer directory in subjects_dir
-    and add auxiliary files provided by the mne package.
+    and add auxiliary files from the mne package.
 
     Parameters
     ----------
@@ -54,7 +54,7 @@ def create_default_subject(mne_root=None, fs_home=None, subjects_dir=None):
         specified as environment variable).
     subjects_dir : None | path
         Override the SUBJECTS_DIR environment variable
-        (sys.environ['SUBJECTS_DIR']) as destination for the new subject.
+        (os.environ['SUBJECTS_DIR']) as destination for the new subject.
     """
     subjects_dir = get_subjects_dir(subjects_dir, raise_error=True)
     if fs_home is None:
@@ -72,13 +72,6 @@ def create_default_subject(mne_root=None, fs_home=None, subjects_dir=None):
                    "create_default_subject().")
             raise ValueError(err)
 
-    # make sure destination does not already exist
-    dest = os.path.join(subjects_dir, 'fsaverage')
-    if os.path.exists(dest):
-        err = ("Can not create fsaverage because %r already exists in "
-               "subjects_dir %r" % ('fsaverage', subjects_dir))
-        raise IOError(err)
-
     # make sure freesurfer files exist
     fs_src = os.path.join(fs_home, 'subjects', 'fsaverage')
     if not os.path.exists(fs_src):
@@ -91,6 +84,21 @@ def create_default_subject(mne_root=None, fs_home=None, subjects_dir=None):
             err = ("Freesurfer fsaverage seems to be incomplete: No directory "
                    "named %s found in %s" % (name, fs_src))
             raise IOError(err)
+
+    # make sure destination does not already exist
+    dest = os.path.join(subjects_dir, 'fsaverage')
+    if dest == fs_src:
+        err = ("Your subjects_dir points to the freesurfer subjects_dir (%r). "
+               "The default subject can not be created in the freesurfer "
+               "installation directory; please specify a different "
+               "subjects_dir." % subjects_dir)
+        raise IOError(err)
+    elif os.path.exists(dest):
+        err = ("Can not create fsaverage because %r already exists in "
+               "subjects_dir %r. Delete or rename the existing fsaverage "
+               "subject folder." % ('fsaverage', subjects_dir))
+        raise IOError(err)
+
 
     # make sure mne files exist
     mne_fname = os.path.join(mne_root, 'share', 'mne', 'mne_analyze',
