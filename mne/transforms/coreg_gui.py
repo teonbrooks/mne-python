@@ -644,12 +644,17 @@ class CoregFrame(HasTraits):
                 self.s_sel.subject = subject
 
         # sync path components to fiducials panel
-        self.s_sel.sync_trait('subject', self.fid_panel, mutual=False)
+#         self.s_sel.sync_trait('subject', self.fid_panel, mutual=False)
         self.s_sel.sync_trait('subjects_dir', self.fid_panel, mutual=False)
 
         # lock fiducials if file is found
         if self.fid_panel.fid_file:
             self.lock_fiducials = True
+
+    @on_trait_change('s_sel.subject')
+    def _on_subject_changes(self, new):
+        if new:
+            self.fid_panel.subject = new
 
     @on_trait_change('scene.activated')
     def init_plot(self):
@@ -724,6 +729,8 @@ class CoregFrame(HasTraits):
     def _on_bem_file_change(self):
         bem_file = self.s_sel.bem_file
         if not bem_file:
+            self.mri_src.reset_traits(['file'])
+            self.fid_panel.reset_traits(['fid_file'])
             return
         self.mri_src.file = bem_file % 'head'
         fid_file = bem_file % 'fiducials'
