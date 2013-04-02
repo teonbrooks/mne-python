@@ -38,7 +38,7 @@ fid_fname = "{subjects_dir}/{subject}/bem/{name}-fiducials.fif"
 
 class FiducialsPanel(HasPrivateTraits):
     """Set fiducials on an MRI surface"""
-    fid_file = File(wildcard="Ficudials FIFF file (*.fif)|*.fif")
+    fid_file = File(filter=["Fiducials FIFF file (*.fif)|*.fif"])
     fid_name = Property(depends_on='fid_file')
     fid_pts = Property(depends_on=['fid_file'])
 
