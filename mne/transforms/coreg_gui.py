@@ -108,6 +108,8 @@ class CoregControl(HasPrivateTraits):
     queue = Instance(Queue, ())
     has_worker = Bool(False)
 
+    background_processing = Bool(False)
+
     # View Element
     axis_labels = Str("Right   \t\tAnterior\t\tSuperior")
 
@@ -332,7 +334,7 @@ class CoregControl(HasPrivateTraits):
             bemdir = os.path.join(self.subjects_dir, subject, 'bem')
             bem = os.path.join(bemdir, '%s-inner_skull-bem.fif' % subject)
 
-            if mridlg.background:
+            if mridlg.background or self.background_processing:
                 if not self.has_worker:
                     def worker():
                         while True:
