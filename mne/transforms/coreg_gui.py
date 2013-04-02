@@ -644,8 +644,8 @@ class CoregFrame(HasTraits):
                 self.s_sel.subject = subject
 
         # sync path components to fiducials panel
-#         self.s_sel.sync_trait('subject', self.fid_panel, mutual=False)
         self.s_sel.sync_trait('subjects_dir', self.fid_panel, mutual=False)
+        self.s_sel.sync_trait('subject', self.fid_panel, mutual=False)
 
         # lock fiducials if file is found
         if self.fid_panel.fid_file:
