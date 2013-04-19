@@ -560,6 +560,8 @@ class CoregFrame(HasTraits):
     s_sel = Instance(SubjectSelector, ())
     coreg = Instance(CoregControl, ())
 
+    pick_tolerance = Float(.0025)
+
     # fiducials
     lock_fiducials = Bool(True)
     fid_panel = Instance(FiducialsPanel)
@@ -726,7 +728,7 @@ class CoregFrame(HasTraits):
 
 #     @on_trait_change('scene.camera.parallel_scale', post_init=True)
     def _on_view_scale_change(self, scale):
-        self.picker.tolerance = .0025 / scale
+        self.picker.tolerance = self.pick_tolerance / scale
 
     def _on_bem_file_change(self):
         bem_file = self.s_sel.bem_file
