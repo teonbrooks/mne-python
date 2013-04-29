@@ -378,7 +378,8 @@ class CoregControl(HasPrivateTraits):
             prog.update(0)
 
             try:
-                scale_mri(self.subject, subject, scale=self.scale, overwrite=True)
+                scale_mri(self.subject, subject, scale=self.scale,
+                          overwrite=True, subjects_dir=self.subjects_dir)
             except Exception as e:
                 error(None, str(e), "Error while Saving Scaled MRI")
 
