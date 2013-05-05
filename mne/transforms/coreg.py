@@ -84,7 +84,7 @@ def create_default_subject(mne_root=None, fs_home=None, subjects_dir=None,
         err = ('fsaverage not found at %r. Is fs_home specified '
                'correctly?' % fs_src)
         raise IOError(err)
-    for name in ('bem', 'label', 'mri', 'surf'):
+    for name in ('label', 'mri', 'surf'):
         dirname = os.path.join(fs_src, name)
         if not os.path.isdir(dirname):
             err = ("Freesurfer fsaverage seems to be incomplete: No directory "
@@ -123,6 +123,7 @@ def create_default_subject(mne_root=None, fs_home=None, subjects_dir=None,
 
     # add files from mne
     dest_bem = os.path.join(dest, 'bem')
+    os.mkdir(dest_bem)
     logger.info("Copying auxiliary fsaverage files from mne directory...")
     for name in mne_files:
         shutil.copy(mne_fname % name, dest_bem)
