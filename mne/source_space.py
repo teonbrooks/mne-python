@@ -506,7 +506,7 @@ def prepare_bem_model(bem, method='linear'):
     if rcode:
         err = os.linesep.join(("mne_prepare_bem_model failed. See output "
                                "below:", stdout, stderr))
-        raise CalledProcessError(err)
+        raise CalledProcessError(err, cmd)
     else:
         if stdout.strip():
             logger.info("stdout:\n%s" % stdout)
@@ -533,7 +533,7 @@ def setup_mri(subject, subjects_dir=None):
     if rcode:
         err = os.linesep.join(("mne_setup_mri failed. See output "
                                "below:", stdout, stderr))
-        raise CalledProcessError(err)
+        raise CalledProcessError(err, cmd)
     else:
         if stdout.strip():
             logger.info("stdout:\n%s" % stdout)
@@ -554,7 +554,7 @@ def setup_source_space(subject, ico=4, subjects_dir=None):
     if rcode:
         err = os.linesep.join(("mne_prepare_bem_model failed. See output "
                                "below:", stdout, stderr))
-        raise CalledProcessError(err)
+        raise CalledProcessError(err, cmd)
     else:
         if stdout.strip():
             logger.info("stdout:\n%s" % stdout)
