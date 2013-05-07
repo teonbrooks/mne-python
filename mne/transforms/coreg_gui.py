@@ -388,18 +388,26 @@ class CoregControl(HasPrivateTraits):
                 prog.update(progi)
                 prog.change_message("Running mne_prepare_bem_model...")
 
-                prepare_bem_model(bem)
+                try:
+                    prepare_bem_model(bem)
+                except Exception as e:
+                    error(None, str(e), "Error in mne_prepare_bem_model")
 
             if mridlg.setup_source_space:
                 progi += 1
                 prog.update(progi)
                 prog.change_message("Running mne_setup_source_space...")
 
-                if mridlg.ss_subd == 'ico':
-                    setup_source_space(subject, ico=mridlg.ss_param,
-                                       subjects_dir=self.subjects_dir)
-                else:
-                    raise NotImplementedError
+                try:
+                    if mridlg.ss_subd == 'ico':
+                        setup_source_space(subject, ico=mridlg.ss_param,
+                                           subjects_dir=self.subjects_dir)
+                    else:
+                        err = ("Can only use ico parameter, not "
+                               "%s" % mridlg.ss_subd)
+                        raise NotImplementedError(err)
+                except Exception as e:
+                    error(None, str(e), "Error in mne_setup_source_space")
 
             prog.close()
 
