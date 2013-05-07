@@ -391,7 +391,8 @@ class CoregControl(HasPrivateTraits):
                 try:
                     prepare_bem_model(bem)
                 except Exception as e:
-                    error(None, str(e), "Error in mne_prepare_bem_model")
+                    err = "%s\n\nSee log for more information." % str(e)
+                    error(None, err, "Error in mne_prepare_bem_model")
 
             if mridlg.setup_source_space:
                 progi += 1
@@ -407,7 +408,8 @@ class CoregControl(HasPrivateTraits):
                                "%s" % mridlg.ss_subd)
                         raise NotImplementedError(err)
                 except Exception as e:
-                    error(None, str(e), "Error in mne_setup_source_space")
+                    err = "%s\n\nSee log for more information." % str(e)
+                    error(None, err, "Error in mne_setup_source_space")
 
             prog.close()
 
