@@ -169,6 +169,7 @@ class ControlPanel(HasTraits):
     headshape = Instance(HeadShape)
     headobj = Instance(PointObject)
     headobj_ref = Instance(PointObject)
+    pick_tolerance = Float(.0025)
 
     view = View(VGroup(Item('headshape', style='custom'),
                        VGroup(Item('headobj', show_label=False, style='custom'),
@@ -178,6 +179,8 @@ class ControlPanel(HasTraits):
                                    style='custom'),
                               label='Reference Head Shape',
                               show_border=True),
+                       VGroup('pick_tolerance',
+                              label="Settings", show_border=True),
                        show_labels=False,
                        ))
 
@@ -188,7 +191,8 @@ class ControlPanel(HasTraits):
 
         fig = self.scene.mayavi_scene
         self.picker = fig.on_mouse_pick(self.picker_callback)
-        self.picker.tolerance = 0.001
+#         self.picker.tolerance = 0.001
+        self.scene.camera.on_trait_change(self._on_view_scale_change, 'parallel_scale')
 
     def picker_callback(self, picker):
         mygl = self.headobj.glyph
@@ -208,6 +212,14 @@ class ControlPanel(HasTraits):
                 idx += 1
 
         self.headshape.exclude.append(idx)
+
+    def _on_view_scale_change(self, scale):
+        self.picker.tolerance = self.pick_tolerance / scale
+
+    @on_trait_change('pick_tolerance')
+    def _on_pick_tolerance_changes(self, tol):
+        self.picker.tolerance = tol / self.scene.camera.parallel_scale
+
 
 
 
