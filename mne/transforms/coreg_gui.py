@@ -590,9 +590,10 @@ class CoregFrame(HasTraits):
                                    dock='vertical', show_label=False),
                               VGroup(headview_item,
                                      Item('mri_obj', label='MRI', style='custom'),
-#                                      label='View',
-                                     show_labels=False,
-#                                      show_border=True
+                                     Item('hsp_obj', label='Head Shape', style='custom'),
+                                     label='View Options',
+                                     show_border=True
+#                                      show_labels=False,
                                      ),
                               ),
                        VGroup(
