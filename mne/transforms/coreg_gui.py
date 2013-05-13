@@ -166,7 +166,6 @@ class CoregControl(HasPrivateTraits):
                                    "as to minimize the distance between the "
                                    "MRI and head shape fiducials"),
                               show_labels=False),
-                       '_',
                        Item('save', enabled_when='can_save', show_label=False),
                        show_labels=False),
                 buttons=[UndoButton])
@@ -768,6 +767,7 @@ class CoregFrame(HasTraits):
                              self.fid_panel.LAP,
                              self.fid_panel.RAP))
             self.coreg.mri_fid = fid
+            self._update_fit_eval_fid()
         else:
             self.hsp_obj.visible = False
             self.hsp_fid_obj.visible = False
